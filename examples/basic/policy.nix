@@ -25,6 +25,16 @@
           dst = ["autogroup:self"];
           ip = ["*"];
         }
+        {
+          src = ["autogroup:member"];
+          dst = ["tag:github-connector"];
+          ip = ["*"];
+        }
+        {
+          src = ["autogroup:member"];
+          dst = ["tag:internal-connector"];
+          ip = ["*"];
+        }
       ];
 
       ssh = [
@@ -40,6 +50,8 @@
         "tag:ci" = ["autogroup:admin"];
         "tag:server" = [];
         "tag:monitoring" = ["autogroup:member"];
+        "tag:github-connector" = ["autogroup:admin"];
+        "tag:internal-connector" = ["autogroup:admin"];
       };
 
       hosts = {
@@ -63,6 +75,20 @@
         ];
       };
 
+      appConnectors = [
+        {
+          name = "GitHub";
+          connectors = ["tag:github-connector"];
+          domains = ["github.com" "*.github.com"];
+          routes = ["140.82.114.0/24"];
+        }
+        {
+          name = "Internal Apps";
+          connectors = ["tag:internal-connector"];
+          domains = ["internal.example.com"];
+        }
+      ];
+
       nodeAttrs = [
         {
           target = ["autogroup:member"];
@@ -78,6 +104,7 @@
         routes = {
           "10.0.0.0/8" = ["autogroup:admin"];
           "192.168.0.0/16" = ["tag:ci"];
+          "140.82.114.0/24" = ["tag:github-connector"];
         };
         exitNode = ["autogroup:admin"];
       };

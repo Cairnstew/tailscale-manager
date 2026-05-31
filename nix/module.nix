@@ -70,11 +70,47 @@ let
     };
   };
 
+  # ── App connector serialization helpers ────────────────────────────
+
+  # Build the tailscale.com/app-connectors array from the user's list.
+  # Strip empty routes per connector (filterAttrs can't reach inside lists).
+  buildConnectorsArray = appConnectors:
+    map (c:
+      builtins.removeAttrs c [ "routes" ]
+      // lib.optionalAttrs (c.routes != []) { routes = c.routes; }
+    ) appConnectors;
+
+  # Build the single nodeAttrs entry wrapping all connectors.
+  buildAppConnectorAttrs = appConnectors:
+    if appConnectors == [] then [] else [{
+      target = ["*"];
+      app = {
+        "tailscale.com/app-connectors" = buildConnectorsArray appConnectors;
+      };
+    }];
+
+  # Merge synthesized app connector entry with user's nodeAttrs.
+  # Entries without an `app` field pass through unchanged.
+  # Entries with an `app` field are dropped (mutual exclusion enforced
+  # by assertion — but we guard anyway to avoid eval errors).
+  mergeNodeAttrs = userNodeAttrs: synthesizedEntry:
+    let
+      nonAppEntries = builtins.filter
+        (e: !(e ? app) || e.app == null || e.app == {})
+        userNodeAttrs;
+    in
+      nonAppEntries ++ synthesizedEntry;
+
   # ── Serialization ────────────────────────────────────────────────
 
   policyToJSON = policy:
     let
       withoutEnable = builtins.removeAttrs policy [ "enable" ];
+      # Synthesize and merge app connector nodeAttrs entry
+      appConnectorAttrs = buildAppConnectorAttrs policy.appConnectors;
+      withoutAppConnectors = builtins.removeAttrs withoutEnable [ "appConnectors" ];
+      mergedNodeAttrs = mergeNodeAttrs withoutAppConnectors.nodeAttrs appConnectorAttrs;
+      withMergedAttrs = withoutAppConnectors // { nodeAttrs = mergedNodeAttrs; };
       # Top-level-only filter.  NOT recursive: we must not reach into
       # nested attrsets (tagOwners, groups, …) because empty-list
       # values are semantically meaningful there (e.g.
@@ -84,7 +120,7 @@ let
       # null / [] / {} in those positions.
       cleaned = lib.filterAttrs
         (name: value: value != [] && value != {} && value != null)
-        withoutEnable;
+        withMergedAttrs;
     in builtins.toJSON cleaned;
 
   policyFile =
@@ -96,6 +132,14 @@ let
       null;
 
   hasPolicyFile = policyFile != null;
+
+  # App connector duplicate name detection
+  hasDuplicateConnectorNames =
+    let
+      names = map (c: c.name) cfg.policy.appConnectors;
+      count = n: builtins.length (builtins.filter (m: m == n) names);
+    in
+      builtins.any (n: count n > 1) names;
 
 in
 {
@@ -542,6 +586,48 @@ in
         description = "Per-device attributes (NextDNS, Funnel, randomize-client-port, app connectors)";
       };
 
+      appConnectors = lib.mkOption {
+        type = lib.types.listOf (lib.types.submodule {
+          options = {
+            name = lib.mkOption {
+              type = lib.types.str;
+              description = "Human-readable connector name (e.g. 'GitHub')";
+              example = "GitHub";
+            };
+            connectors = lib.mkOption {
+              type = lib.types.listOf lib.types.str;
+              description = "Tags of devices acting as app connectors";
+              example = ["tag:github-connector"];
+            };
+            domains = lib.mkOption {
+              type = lib.types.listOf lib.types.str;
+              description = "Domains the connector proxies (e.g. ['github.com'])";
+              example = ["github.com" "*.github.com"];
+            };
+            routes = lib.mkOption {
+              type = lib.types.listOf lib.types.str;
+              default = [];
+              description = "Optional CIDR routes the connector proxies";
+              example = ["140.82.114.0/24"];
+            };
+          };
+        });
+        default = [];
+        description = ''
+          Declarative app connector configuration.
+
+          This option synthesizes the correct nodeAttrs entry with the
+          tailscale.com/app-connectors capability. It merges with any
+          existing policy.nodeAttrs entries that do not have an `app` field.
+
+          IMPORTANT: This is only the policy-file half. You must also:
+          1. Configure the connector host device (tailscale up --advertise-connector)
+          2. Declare tag ownership via policy.tagOwners for every connector tag
+          3. Optionally declare access grants via policy.grants
+          4. Optionally declare route auto-approval via policy.autoApprovers
+        '';
+      };
+
       autoApprovers = lib.mkOption {
         type = lib.types.submodule {
           options = {
@@ -559,7 +645,7 @@ in
               description = "Authorized approvers for exit node advertisements";
               example = ["tag:corp-exit"];
             };
-            appConnector = lib.mkOption {
+            appConnectors = lib.mkOption {
               type = lib.types.listOf lib.types.str;
               default = [];
               description = "Authorized approvers for app connector advertisements";
@@ -693,8 +779,16 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-
-    assertions = [
+    assertions =
+      lib.optionals (hasDuplicateConnectorNames && cfg.policy.enable) [{
+        assertion = false;
+        message = ''
+          services.tailscale-manager.policy.appConnectors: duplicate connector
+          name detected.  Connector names must be unique — the Tailscale API
+          will reject the policy.
+        '';
+      }]
+      ++ [
       {
         assertion = cfg.credentialsFile != null;
         message = ''
@@ -724,6 +818,37 @@ in
           services.tailscale-manager.policy is enabled but
           services.tailscale-manager.acl.enable is false.
           Set acl.enable = true to manage the tailnet policy.
+        '';
+      }
+      {
+        assertion = !(cfg.policy.appConnectors != [] && !cfg.policy.enable);
+        message = ''
+          services.tailscale-manager.policy.appConnectors is non-empty but
+          services.tailscale-manager.policy.enable is false.
+          Set policy.enable = true to use structured app connector options.
+        '';
+      }
+      {
+        assertion = !(cfg.policy.appConnectors != [] && !cfg.acl.enable);
+        message = ''
+          services.tailscale-manager.policy.appConnectors is non-empty but
+          services.tailscale-manager.acl.enable is false.
+          Set acl.enable = true to manage the tailnet policy including app connectors.
+        '';
+      }
+      {
+        assertion = !(
+          cfg.policy.appConnectors != []
+          && builtins.any
+              (e: (e ? app) && e.app != null && e.app != {})
+              cfg.policy.nodeAttrs
+        );
+        message = ''
+          services.tailscale-manager.policy.appConnectors is set alongside a
+          services.tailscale-manager.policy.nodeAttrs entry with an `app` field.
+          These are mutually exclusive. Either:
+          - Use appConnectors (typed, recommended) and remove the nodeAttrs.app entry, or
+          - Remove appConnectors and manage the app connector nodeAttrs entry manually.
         '';
       }
     ];

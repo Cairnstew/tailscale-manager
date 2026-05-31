@@ -169,10 +169,26 @@ services.tailscale-manager = {
 | `postures` | Device posture conditions with `node:os` and `node:tsReleaseTrack` |
 | `nodeAttrs` | Per-device attributes (funnel, randomize-client-port) |
 | `autoApprovers` | Route auto-approval by role or tag |
+| `appConnectors` | App connectors — typed option that synthesizes the correct nodeAttrs entry |
+
+## App connectors
+
+The `appConnectors` option is the typed, preferred way to configure app connectors.
+It synthesizes the correct `nodeAttrs` entry with `tailscale.com/app-connectors`
+and merges it with any existing `nodeAttrs` entries that don't have an `app` field.
+
+**What you must also configure:**
+
+1. **Device-side**: the connector host must run `tailscale up --advertise-connector`
+2. **tagOwners**: every tag in `connectors` must be declared in `tagOwners`
+3. **grants** (optional): access rules for the connector tag
+4. **autoApprovers** (optional): route auto-approval for advertised routes
 
 ## Notes
 
 - The Nix `policy` block serializes to the JSON verbatim via `policyToJSON`.
+- `appConnectors` and `nodeAttrs.app` are mutually exclusive — the module
+  raises an assertion if both are set.
 - Empty owner lists (`tag:server = []`) survive serialization — Tailscale treats
   them as "admin-only tags", distinct from absent entries.
 - The `enable` sentinel is stripped before serialization and does not appear

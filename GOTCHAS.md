@@ -53,6 +53,35 @@ from an unmanaged tag).
 Rule: only strip null/empty at the top level. Never filter recursively into
 policy section values.
 
+## App connectors: nodeAttrs.app and appConnectors are mutually exclusive
+
+If you use `policy.appConnectors`, do not also set an `app` field on any
+`policy.nodeAttrs` entry. The module will raise an assertion error. If you
+need a custom app capability alongside app connectors, define the entire
+nodeAttrs block manually via `policy.nodeAttrs` and set
+`appConnectors = []`.
+
+## App connectors: connector tag ownership is your responsibility
+
+`policy.appConnectors` does NOT auto-generate `tagOwners` entries. You must
+declare `tagOwners` for every tag in your `connectors` lists, or the Tailscale
+API will reject the policy with a "tag not owned" error.
+
+## App connectors: routes are implicitly approved
+
+Routes defined inside a `policy.appConnectors` entry do NOT need a matching
+`autoApprovers.routes` entry — Tailscale implicitly approves them when they're
+declared in the policy file. You only need `autoApprovers.routes` for routes
+that are advertised externally (e.g. via `tailscale up --advertise-routes` on
+a device that isn't the connector).
+
+## Policy file overwrites admin console changes
+
+If you use Terraform (via tailscale-manager) to manage the policy file,
+any changes made in the Tailscale admin console (ACLs, app connectors, etc.)
+will be overwritten on the next `nixos-rebuild switch`. Manage everything
+declaratively via `services.tailscale-manager.policy`.
+
 ## Tailscale Manager
 
 ### terraform binary not in Python deps
