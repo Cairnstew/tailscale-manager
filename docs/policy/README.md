@@ -54,7 +54,7 @@ and API both accept and return HuJSON.
   "derpMap":              {},
   "disableIPv4":          false,
   "randomizeClientPort":  false,
-  "OneCGNATRoute":        ""
+  "oneCGNATRoute":        ""
 }
 ```
 
@@ -75,7 +75,7 @@ All top-level keys are optional. An empty policy file `{}` grants no access
 | Hosts | [`hosts.md`](./hosts.md) | Targets | Named IP/CIDR aliases. |
 | IP sets | [`ipsets.md`](./ipsets.md) | Targets | Named collections of IP ranges. |
 | Postures | [`postures.md`](./postures.md) | Attributes | Device posture conditions for access rules. |
-| Node attributes | [`node-attrs.md`](./node-attrs.md) | Attributes | Per-device settings (NextDNS, funnel, etc.). |
+| Node attributes | [`node-attrs.md`](./node-attrs.md) | Attributes | Per-device settings (NextDNS, funnel, app connectors, etc.). In the NixOS module, use `policy.appConnectors` for app connectors — it synthesizes the correct `nodeAttrs` entry. |
 | Auto approvers | [`auto-approvers.md`](./auto-approvers.md) | Automation | Who can bypass approval for routes/exit nodes. |
 | Tests | [`tests.md`](./tests.md) | Tests | Assertions about ACLs/grants that must pass. |
 | Network options | [`network-options.md`](./network-options.md) | Options | DERP, IPv4, CGNAT, client port settings. |

@@ -58,6 +58,13 @@
 │       ├── __init__.py           #   Exports read-only status dashboard
 │       └── app.py                #   TailscaleManagerApp (Textual app)
 │
+├── examples/                  # Live-tested example configurations
+│   ├── README.md              #   Index of examples
+│   └── basic/                 #   All policy sections demonstrated
+│       ├── README.md
+│       ├── policy.nix
+│       └── policy.json
+│
 ├── tests/                     # Tiered test suite
 │   ├── conftest.py            # Root: sys.path, session-scoped setup
 │   ├── unit/                  # Fast, no I/O — mocks & fakes only

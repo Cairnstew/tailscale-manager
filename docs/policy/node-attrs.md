@@ -3,6 +3,12 @@
 Per-device configuration for specialized features — NextDNS, Tailscale Funnel,
 randomize-client-port, and app connectors.
 
+> **NixOS module**: If you use `services.tailscale-manager`, prefer the
+> `policy.appConnectors` option over manually configuring the `app` field in
+> `nodeAttrs`. The typed option synthesizes the correct JSON structure and
+> merges with any existing `nodeAttrs` entries that don't have an `app` field.
+> See [`examples/basic/`](../../examples/basic/) for a complete setup.
+
 > **Source**: [Tailscale Docs — Policy file syntax](https://tailscale.com/docs/reference/syntax/policy-file)
 > Last validated: Apr 8, 2026
 

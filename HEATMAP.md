@@ -21,7 +21,7 @@ Complexity, fragility, and change-frequency ranking for every file in this proje
 | `nix/default.nix` | 🟢 Low | Simple callPackage — just wraps mkApplication. Stable. |
 | `nix/devshell.nix` | 🟡 Medium | DevShell definitions — changes when env vars, shell hooks, or packages change. |
 | `nix/overlay.nix` | 🟢 Low | Reference overlay — rarely touched once set up. |
-| `nix/module.nix` | 🟢 Low | NixOS module — template placeholder, filled in per-project. |
+| `nix/module.nix` | 🟡 Medium | NixOS module with structured policy submodule (~900 lines). Option declarations + policyToJSON serialization + merge logic + assertions. Grows with each policy section. |
 | `nix/home-module.nix` | 🟢 Low | HM module — same, template placeholder. |
 | `nix/checks.nix` | 🟢 Low | Build smoke tests — stable. |
 | `src/tailscale_manager/__init__.py` | 🟢 Low | Public API surface — simple re-export. |
@@ -52,6 +52,8 @@ Complexity, fragility, and change-frequency ranking for every file in this proje
 | `AGENTS.md` | 🟢 Low | Agent instructions. Changes when project conventions shift. |
 | `docs/POLICY.md` | 🟢 Low | Policy file index — updated when policy/ directory structure changes. |
 | `docs/policy/` (16 files) | 🟢 Low | Policy file deep reference. Updated when upstream syntax changes. |
+| `examples/` | 🟢 Low | Live-tested example configs. Updated when new policy sections or patterns are added. |
+| `tests/unit/test_app_connectors.nix` | 🟢 Low | Nix eval tests for app connector serialization. Updated when serialization logic changes. |
 | `docs/OAUTH.md` | 🟢 Low | OAuth client reference. Updated when scope model changes. |
 | `docs/API.md` | 🟢 Low | API endpoint reference. Updated when new endpoints or scopes are relevant. |
 | `docs/CONCEPTS.md` | 🟢 Low | Terminology reference. Stable — updated only when project scope shifts. |

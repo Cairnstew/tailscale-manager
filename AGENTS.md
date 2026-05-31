@@ -4,6 +4,16 @@
 
 Python project managed with `uv2nix` — uv's `uv.lock` drives Nix derivations via pure Nix code.
 
+## Examples
+
+Live-tested example configurations live in `examples/`. Each example has a
+`policy.nix` (NixOS config) and `policy.json` (serialized output) side by
+side for comparison.
+
+| Directory | What it demonstrates |
+|---|---|
+| [`examples/basic/`](./examples/basic/) | All policy sections: grants, SSH, tag owners, hosts, IP sets, postures, node attrs, auto-approvers, app connectors |
+
 ## Reference files
 
 | File | Role |
@@ -48,6 +58,7 @@ Python project managed with `uv2nix` — uv's `uv.lock` drives Nix derivations v
 | `nix/checks.nix` | Flake checks |
 | `pyproject.toml` | Python project metadata, dependencies |
 | `uv.lock` | Lock file — drives the Nix overlay. **Must be regenerated after any pyproject.toml change.** |
+| `examples/` | Live-tested example configs with Nix + JSON side by side |
 | `src/tailscale_manager/` | Application package source |
 | `src/textual_ui/` | TUI package (Textual) — optional, add as dependency when needed |
 | `tests/` | Test suite |

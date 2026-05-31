@@ -44,6 +44,12 @@ Managed keys: 1
   HTTPS enforcement, and more via `tailnetSettings`.
 - **ACL management** — opt-in full tailnet policy management with automatic
   backup of the current policy before every apply and restore on failure.
+  Structured Nix options for grants, ACLs, SSH, tag owners, groups, hosts,
+  IP sets, device postures, node attributes, auto-approvers, app connectors,
+  and network options.
+- **App connectors** — typed `policy.appConnectors` option that synthesizes
+  the correct `nodeAttrs` entry with `tailscale.com/app-connectors` and
+  merges it with existing node attributes.
 - **Device discovery** — `tailscale-manager devices` CLI and a live device
   panel in the TUI, fed from Terraform state.
 - **Failure-safe** — tfstate is backed up before every apply. On failure, the
@@ -318,6 +324,7 @@ tailscale-manager version       # show version
 | `TAILSCALE_MANAGER_DNS_MAGIC_DNS` | — | `false` | Enable MagicDNS |
 | `TAILSCALE_MANAGER_ACL_ENABLE` | — | `false` | Enable ACL management |
 | `TAILSCALE_MANAGER_ACL_FORMAT` | — | `hujson` | ACL format (`hujson` or `json`) |
+| `TAILSCALE_MANAGER_ACL_POLICY_PATH` | — | `""` | Path to a JSON file containing the full policy (used by NixOS module when structured policy is enabled) |
 
 ### Exit codes
 
