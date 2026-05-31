@@ -30,12 +30,26 @@
 │   │   ├── __init__.py
 │   │   ├── py.typed
 │   │   ├── core/
+│   │   │   ├── acl_backup.py        #   ACL policy backup/restore utilities
+│   │   │   ├── config.py            #   AppConfig (Pydantic) with env var parsing
+│   │   │   ├── constants.py         #   Well-known paths and filenames
+│   │   │   └── exceptions.py        #   Domain exceptions
 │   │   ├── models/
-│   │   │   └── auth_key.py          #   TailscaleAuthKey dataclass
+│   │   │   ├── acl.py               #   AclConfig model
+│   │   │   ├── auth_key.py          #   TailscaleAuthKey dataclass
+│   │   │   ├── device.py            #   TailscaleDevice dataclass
+│   │   │   └── settings.py          #   TailnetSettings model
 │   │   ├── services/
-│   │   │   └── terraform_service.py #   Backup, generate HCL, init/plan/apply/destroy
+│   │   │   ├── features/            #   Feature config builders (per resource type)
+│   │   │   │   ├── __init__.py      #     Re-exports all builders
+│   │   │   │   ├── acl.py           #     tailscale_acl builder
+│   │   │   │   ├── devices.py       #     data.tailscale_devices builder
+│   │   │   │   ├── dns.py           #     tailscale_dns_* builders
+│   │   │   │   └── settings.py      #     tailscale_tailnet_settings builder
+│   │   │   └── terraform_service.py #   Orchestrator: calls feature builders,
+│   │   │                            #   writes multi-file .tf.json, runs terraform
 │   │   ├── repositories/
-│   │   │   └── state_repository.py  #   Read/write tfstate and last-apply.json
+│   │   │   └── state_repository.py  #   Read/write tfstate, last-apply.json, devices
 │   │   ├── utils/
 │   │   │   └── subprocess_helpers.py #  Terraform subprocess runner
 │   │   └── cli.py                   #   Typer entrypoint (all subcommands)
@@ -48,7 +62,16 @@
 │   ├── conftest.py            # Root: sys.path, session-scoped setup
 │   ├── unit/                  # Fast, no I/O — mocks & fakes only
 │   │   ├── conftest.py
+│   │   ├── test_acl_backup.py
+│   │   ├── test_acl_feature.py
+│   │   ├── test_acl_model.py
 │   │   ├── test_cli.py
+│   │   ├── test_cli_devices.py
+│   │   ├── test_device_model.py
+│   │   ├── test_devices_feature.py
+│   │   ├── test_dns_feature.py
+│   │   ├── test_settings_feature.py
+│   │   ├── test_settings_model.py
 │   │   ├── test_state_repository.py
 │   │   └── test_terraform_service.py
 │   ├── integration/           # Needs services (DB, network)

@@ -26,13 +26,16 @@ Complexity, fragility, and change-frequency ranking for every file in this proje
 | `nix/checks.nix` | 🟢 Low | Build smoke tests — stable. |
 | `src/tailscale_manager/__init__.py` | 🟢 Low | Public API surface — simple re-export. |
 | `src/tailscale_manager/py.typed` | 🟢 Low | PEP 561 marker. Created once, never touched. |
-| `src/tailscale_manager/core/` | 🟡 Medium | Config (pydantic) reads env vars at import. Fragile if env changes. |
-| `src/tailscale_manager/models/` | 🟢 Low | Pure data shapes. |
-| `src/tailscale_manager/services/terraform_service.py` | 🟡 Medium | Core business logic — subprocess calls to terraform, backup/restore. |
-| `src/tailscale_manager/services/tailscale_api_service.py` | 🟢 Low | Optional API reader, not used by main flow. |
+| `src/tailscale_manager/core/config.py` | 🟡 Medium | Pydantic AppConfig with env var parsing — grows with each feature. |
+| `src/tailscale_manager/core/acl_backup.py` | 🟢 Low | Standalone backup/restore utilities — simple I/O. |
+| `src/tailscale_manager/core/exceptions.py` | 🟢 Low | Exception classes — rarely touched. |
+| `src/tailscale_manager/core/constants.py` | 🟢 Low | Well-known paths — stable. |
+| `src/tailscale_manager/models/` | 🟢 Low | Pure data shapes — one file per feature. |
+| `src/tailscale_manager/services/terraform_service.py` | 🟡 Medium | Core orchestrator — imports feature builders, writes multi-file .tf.json, subprocess calls to terraform, backup/restore. |
+| `src/tailscale_manager/services/features/` | 🟢 Low | One module per Terraform resource type — pure dict builders, stateless. |
 | `src/tailscale_manager/repositories/` | 🟢 Low | State file I/O — stable interface. |
 | `src/tailscale_manager/utils/` | 🟢 Low | Stateless helpers. |
-| `src/tailscale_manager/cli.py` | 🟡 Medium | Typer entrypoint — all subcommands defined here. |
+| `src/tailscale_manager/cli.py` | 🟡 Medium | Typer entrypoint — all subcommands defined here. Grows with each feature. |
 | `src/textual_ui/` | 🟢 Low | Standalone TUI package — optional dependency. Low fragility, rarely changed once stable. DOCS.md is the reference doc. |
 | `tests/conftest.py` | 🟡 Medium | Root path setup — rarely changed but every test depends on it. |
 | `tests/unit/` | 🟢 Low | Per-tier dirs; contents grow with project. |

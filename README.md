@@ -11,12 +11,12 @@
 
 # tailscale-manager
 
-Declaratively manage Tailscale auth keys via Terraform on NixOS.
+Declaratively manage your entire Tailscale tailnet via Terraform on NixOS.
 
 A NixOS module + Python CLI that wraps the [Tailscale Terraform
 provider](https://registry.terraform.io/providers/tailscale/tailscale)
-to create, rotate, and expire auth keys — all packaged hermetically with
-[uv2nix](https://github.com/pyproject-nix/uv2nix).
+to manage auth keys, DNS, tailnet settings, ACLs, and device discovery —
+all packaged hermetically with [uv2nix](https://github.com/pyproject-nix/uv2nix).
 
 ```console
 $ tailscale-manager status
@@ -38,12 +38,20 @@ Managed keys: 1
   update, or rotate auth keys. No imperative API calls.
 - **Automatic rotation** — `recreate_if_invalid = "always"` means expired keys
   are replaced automatically on the next apply. No cron, no expiry tracking.
+- **DNS management** — declarative nameservers, MagicDNS, and per-domain split
+  DNS via `dns.nameservers`, `dns.magicDns`, `dns.splitNameservers`.
+- **Tailnet settings** — configure device approval, auto-updates, key duration,
+  HTTPS enforcement, and more via `tailnetSettings`.
+- **ACL management** — opt-in full tailnet policy management with automatic
+  backup of the current policy before every apply and restore on failure.
+- **Device discovery** — `tailscale-manager devices` CLI and a live device
+  panel in the TUI, fed from Terraform state.
 - **Failure-safe** — tfstate is backed up before every apply. On failure, the
   previous state is restored and the error is written to `last-apply.json`.
 - **Credential watcher** — a systemd path unit re-runs apply when the OAuth
   secret file changes (e.g. after agenix rotation).
-- **Read-only TUI** — optional Textual dashboard showing managed keys and
-  system status. No write operations from the UI.
+- **Read-only TUI** — optional Textual dashboard showing managed keys, devices,
+  and system status. No write operations from the UI.
 - **Monitoring-ready** — `tailscale-manager status --json` with exit code
   signaling for waybar, Prometheus node_exporter textfile collector, etc.
 - **Hermetic builds** — full dependency tree locked via `uv.lock` and built
@@ -80,8 +88,10 @@ Managed keys: 1
 1. Go to [Tailscale admin console → Settings → OAuth clients](https://login.tailscale.com/admin/settings/oauth)
 2. Click **Generate OAuth client**
 3. Under **Scopes**, enable:
-   - `auth_keys` — write access (required)
-   - `devices` — read access (optional, for TUI status)
+   - `auth_keys` — write access (required for key management)
+   - `devices` — read access (required for device discovery)
+   - `dns` — write access (required for DNS management)
+   - `tailnet` — read + write access (required for tailnet settings and ACLs)
 4. Under **Tag ownership**, add every tag you intend to pass via the
    `tags` option (e.g. `tag:server`, `tag:ci`). The OAuth client **must**
    own the tags it creates keys for — this is enforced by Tailscale and
@@ -135,7 +145,7 @@ and create a new one — **automatic rotation with zero custom logic.**
 All options under `services.tailscale-manager`.
 
 | Option | Type | Default | Description |
-|---|---|---|---|
+|---|---|---|---|---|
 | `enable` | `bool` | `false` | Enable the tailscale-manager service |
 | `tailnet` | `string` | *(required)* | Tailnet name, e.g. `example.com`. Pass `"-"` to auto-resolve from the OAuth credential. |
 | `credentialsFile` | `null or path` | `null` | *(required via assertion)* Path to an EnvironmentFile containing `TAILSCALE_OAUTH_CLIENT_ID` and `TAILSCALE_OAUTH_CLIENT_SECRET`. Encrypt with agenix or sops-nix. |
@@ -148,6 +158,13 @@ All options under `services.tailscale-manager`.
 | `enableTimer` | `bool` | `false` | Enable a daily systemd timer to automatically re-run apply |
 | `recreateIfInvalid` | `enum` | `"always"` | Whether to recreate the key if invalid (`"always"` or `"never"`) |
 | `providerVersion` | `string` | `"~> 0.29"` | Tailscale Terraform provider version constraint |
+| `dns.nameservers` | `list of strings` | `[]` | Global DNS nameserver IPs |
+| `dns.magicDns` | `bool` | `false` | Enable MagicDNS |
+| `dns.splitNameservers` | `attrs of list of strings` | `{}` | Per-domain split DNS (domain → nameserver IPs) |
+| `tailnetSettings` | `null or submodule` | `null` | Declarative tailnet-wide settings (device approval, auto-updates, HTTPS, etc.) |
+| `acl.enable` | `bool` | `false` | Enable ACL management (opt-in; backs up current policy before apply) |
+| `acl.format` | `enum` | `"hujson"` | Policy format — `"hujson"` or `"json"` |
+| `acl.policy` | `string` | `""` | Full ACL policy string (HuJSON or JSON) |
 
 ### Systemd units
 
@@ -156,13 +173,15 @@ Three units are created when enabled:
 **`tailscale-manager.service`** — `Type=oneshot`, runs on every
 `nixos-rebuild switch` (via `wantedBy = ["multi-user.target"]`):
 1. Backs up `terraform.tfstate` to `backups/<timestamp>.tfstate`
-2. Prunes old backups to `backupCount`
-3. Generates `main.tf.json`
-4. Runs `terraform init`
-5. Runs `terraform apply -auto-approve`
-6. Writes result to `last-apply.json`
-7. On failure: restores the most recent backup, writes error to
-   `last-apply.json`, exits 1 (systemd shows red)
+2. Backs up current ACL policy if ACL management is enabled
+3. Prunes old backups to `backupCount`
+4. Generates `.tf.json` files (`main.tf.json`, `keys.tf.json`,
+   `data.tf.json`, `dns.tf.json`, `settings.tf.json`, `acl.tf.json`)
+5. Runs `terraform init`
+6. Runs `terraform apply -auto-approve`
+7. Writes result to `last-apply.json`
+8. On failure: restores the most recent tfstate backup and ACL backup,
+   writes error to `last-apply.json`, exits 1 (systemd shows red)
 
 **`tailscale-manager-watch.path`** — if `watchCredentials = true`:
 writes the file path changes. Re-triggers the service when
@@ -206,6 +225,15 @@ Options: `enable`, `package`, `tailnet`, `credentialsFile`.
 ---
 
 ## Credential setup
+
+> **Required OAuth scopes** depend on which features you use:
+> - `auth_keys` — always required
+> - `devices` — read access (required for device discovery)
+> - `dns` — write access (required for DNS management)
+> - `tailnet` — read + write access (required for tailnet settings and ACLs)
+>
+> Run `tailscale-manager init` after configuration to see preflight warnings
+> about which scopes are needed.
 
 The credentials file must be an EnvironmentFile (KEY=VAL format) containing:
 
@@ -260,12 +288,14 @@ services.tailscale-manager = {
 ## CLI reference
 
 ```console
-tailscale-manager init          # terraform init + provider download
+tailscale-manager init          # terraform init + provider download + preflight scope check
 tailscale-manager plan          # terraform plan (shows pending changes)
 tailscale-manager apply         # backup → generate → init → apply
 tailscale-manager destroy       # backup → terraform destroy
 tailscale-manager status        # read-only TUI dashboard
 tailscale-manager status --json # JSON for scripting
+tailscale-manager devices       # list discovered devices from tfstate
+tailscale-manager devices --json # JSON device list for scripting
 tailscale-manager backup-state  # manual tfstate backup
 tailscale-manager restore-state # manual tfstate restore
 tailscale-manager version       # show version
@@ -284,6 +314,10 @@ tailscale-manager version       # show version
 | `TAILSCALE_MANAGER_TAGS` | — | `""` | Comma-separated tags, e.g. `tag:ci,tag:infra` |
 | `TAILSCALE_MANAGER_RECREATE_IF_INVALID` | — | `"always"` | Key rotation policy (`"always"` or `"never"`) |
 | `TAILSCALE_MANAGER_PROVIDER_VERSION` | — | `"~> 0.29"` | Tailscale Terraform provider version constraint |
+| `TAILSCALE_MANAGER_DNS_NAMESERVERS` | — | `""` | Comma-separated DNS nameserver IPs |
+| `TAILSCALE_MANAGER_DNS_MAGIC_DNS` | — | `false` | Enable MagicDNS |
+| `TAILSCALE_MANAGER_ACL_ENABLE` | — | `false` | Enable ACL management |
+| `TAILSCALE_MANAGER_ACL_FORMAT` | — | `hujson` | ACL format (`hujson` or `json`) |
 
 ### Exit codes
 
@@ -338,8 +372,10 @@ flowchart TD
 
 Key guarantees:
 - **Before every mutation**: tfstate is backed up to `backups/<timestamp>.tfstate`
-- **On any failure**: the most recent backup is restored, leaving state exactly
-  as it was before the apply
+- **Before ACL apply**: current ACL policy is backed up to
+  `backups/acl-backup-<timestamp>.hujson`
+- **On any failure**: the most recent tfstate and ACL backups are restored,
+  leaving state and policy exactly as they were before the apply
 - **Monitoring surface**: `last-apply.json` is the single source of truth for
   the last operation's result. The TUI, `status --json`, and activation script
   all read from it.
@@ -379,28 +415,30 @@ Install with `uv add textual` or enable the `tui` extra, then run
 `tailscale-manager status`.
 
 ```
-┌─────────────────────────────────────────┐
-│  Tailscale Manager — your-tailnet.ts.net│
-├────────────────┬────────────────────────┤
-│ KEY STATUS     │  SYSTEM STATUS         │
-│                │                        │
-│ DataTable:     │  Last apply: 2026-...  │
-│  ✓ k123 — ci  │  Result: ✓ ok          │
-│                │  Terraform state: found│
-│                │  Credentials: found    │
-│                │  Backups: 3 retained   │
-│                │                        │
-│                │  State dir: /var/lib/..│
-│                │  Tailnet: your-tailnet │
-└────────────────┴────────────────────────┘
-│  Q: Quit  R: Refresh  L: View Logs      │
-└─────────────────────────────────────────┘
+┌───────────────────────┬──────────────────┬────────────────────────┐
+│  Tailscale Manager — your-tailnet.ts.net│                        │
+├───────────────────────┼──────────────────┤                        │
+│ KEY STATUS            │ DEVICES          │  SYSTEM STATUS         │
+│                       │                  │                        │
+│ DataTable:            │ DataTable:       │  Last apply: 2026-...  │
+│  ✓ k123 — ci          │  node1           │  Result: ✓ ok          │
+│                       │  node2           │  Terraform state: found│
+│                       │                  │  Credentials: found    │
+│                       │                  │  Backups: 3 retained   │
+│                       │                  │  Devices: 2 discovered │
+│                       │                  │                        │
+│                       │                  │  State dir: /var/lib/..│
+│                       │                  │  Tailnet: your-tailnet │
+└───────────────────────┴──────────────────┴────────────────────────┘
+│  Q: Quit  R: Refresh  L: View Logs  D: Toggle Devices              │
+└────────────────────────────────────────────────────────────────────┘
 ```
 
 - **Left panel**: DataTable of managed auth keys from local tfstate
-- **Right panel**: System status (last apply, backups, credentials)
-- **Footer**: Q=Quit, R=Refresh (or auto-refresh every 30s), L=View Logs
-  (tails `journalctl -u tailscale-manager.service`)
+- **Center panel**: DataTable of discovered devices from `data.tailscale_devices`
+- **Right panel**: System status (last apply, backups, credentials, device count)
+- **Footer**: Q=Quit, R=Refresh (or auto-refresh every 30s), L=View Logs,
+  D=Toggle devices panel
 - **Read-only**: zero write operations from the UI
 
 ---
@@ -519,6 +557,7 @@ src/tailscale_manager/
 ├── core/           imports nothing from the package
 ├── models/         pure data shapes
 ├── services/       imports models/ and repositories/
+│   └── features/   feature config builders (one per Terraform resource type)
 ├── repositories/   data access (tfstate I/O)
 ├── utils/          stateless pure functions
 └── cli.py          Typer entrypoint (imports services/)
