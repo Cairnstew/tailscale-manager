@@ -40,6 +40,8 @@ jobs:
     if: needs.detect.outputs.has_cli == 'true'
     runs-on: ubuntu-latest
     environment: release
+    permissions:
+      id-token: write  # Required for PyPI trusted publishing (OIDC)
     steps:
       - uses: actions/checkout@v4
 
@@ -54,8 +56,6 @@ jobs:
         run: |
           nix develop .#bootstrap --command uv build
           nix develop .#bootstrap --command uv publish
-        env:
-          UV_PUBLISH_TOKEN: ${{ secrets.PYPI_TOKEN }}
 
   github-release:
     needs: [detect, build]
