@@ -4,12 +4,14 @@ import os
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from tailscale_manager.models.settings import TailnetSettings
 
 
 class AppConfig(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     tailnet: str = Field(
         description="Tailscale tailnet name (e.g. example.com)"
     )
