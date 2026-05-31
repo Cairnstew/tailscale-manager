@@ -4,6 +4,42 @@ All notable changes to this project will be documented in this file.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
+## [0.3.1] - 2026-05-31
+
+### Added
+
+- **Structured policy options**: Replaced raw `services.tailscale-manager.acl.policy`
+  string with `services.tailscale-manager.policy` — a full set of typed Nix submodule
+  options mirroring the entire Tailscale policy file JSON schema: `grants`, `acls`,
+  `ssh`, `tagOwners`, `groups`, `hosts`, `ipsets`, `postures`, `nodeAttrs`,
+  `autoApprovers`, `tests`, `sshTests`, `derpMap`, `disableIPv4`,
+  `randomizeClientPort`, `oneCGNATRoute`.
+- **Documentation**: Comprehensive policy file reference under `docs/policy/` —
+  16 files covering every section of the Tailscale policy file with exact JSON
+  structures, field types, allowable values, and examples. Also `docs/OAUTH.md`,
+  `docs/API.md`, `docs/CONCEPTS.md`.
+- **GOTCHAS.md**: Entry documenting the `filterAttrs` vs `filterAttrsRecursive`
+  footgun for policy serialization.
+
+### Changed
+
+- Policy serialization uses `lib.filterAttrs` (non-recursive) to preserve
+  semantically meaningful empty lists in nested attrsets like `tagOwners`.
+- Python `AppConfig` reads policy from `TAILSCALE_MANAGER_ACL_POLICY_PATH` env
+  var via a `model_validator`, supporting both NixOS file-based injection and
+  direct env-var usage outside NixOS.
+- `test_build_acl_config_enabled_hujson` updated to expect
+  `overwrite_existing_content: True`.
+- DNS split nameserver tests reconciled with the aggregated single-resource format.
+
+### Fixed
+
+- `tagOwners` entries with empty owner lists (e.g. `"tag:server": []`) no longer
+  silently dropped from serialized policy JSON. These are semantically distinct
+  from absent entries.
+- `filterAttrsRecursive` replaced with `filterAttrs` to avoid stripping
+  meaningful empty values from nested attrsets.
+
 ## [0.3.0] - 2026-05-31
 
 ### Added
