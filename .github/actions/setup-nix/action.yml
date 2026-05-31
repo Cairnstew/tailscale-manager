@@ -1,0 +1,18 @@
+name: Setup Nix
+description: Installs Nix, enables caching, provides uv
+runs:
+  using: composite
+  steps:
+    - uses: DeterminateSystems/nix-installer-action@v16
+
+    - uses: DeterminateSystems/magic-nix-cache-action@v8
+
+    - uses: DeterminateSystems/flake-checker-action@v9
+
+    - uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cache/uv
+          .ruff_cache
+          .mypy_cache
+        key: cache-${{ runner.os }}-${{ hashFiles('uv.lock') }}

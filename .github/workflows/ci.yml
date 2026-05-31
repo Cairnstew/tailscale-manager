@@ -1,0 +1,125 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  detect:
+    runs-on: ubuntu-latest
+    outputs:
+      has_cli: ${{ steps.cli.outputs.value }}
+      has_textual_ui: ${{ steps.textual.outputs.value }}
+      has_ruff: ${{ steps.ruff.outputs.value }}
+      has_mypy: ${{ steps.mypy.outputs.value }}
+      has_coverage: ${{ steps.coverage.outputs.value }}
+      has_nix_module: ${{ steps.nix_module.outputs.value }}
+      test_tiers: ${{ steps.tiers.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: cli
+        run: |
+          value=false
+          if grep -Pq '^[a-zA-Z_][a-zA-Z0-9_-]*\s*=' pyproject.toml 2>/dev/null; then
+            value=true
+          fi
+          echo "value=$value" >> "$GITHUB_OUTPUT"
+
+      - id: textual
+        run: |
+          test -f src/textual_ui/app.py && echo "value=true" || echo "value=false" \
+            >> "$GITHUB_OUTPUT"
+
+      - id: ruff
+        run: |
+          grep -q '\[tool.ruff\]' pyproject.toml && echo "value=true" || echo "value=false" \
+            >> "$GITHUB_OUTPUT"
+
+      - id: mypy
+        run: |
+          grep -q '\[tool.mypy\]' pyproject.toml && echo "value=true" || echo "value=false" \
+            >> "$GITHUB_OUTPUT"
+
+      - id: coverage
+        run: |
+          grep -q '\[tool.coverage\]' pyproject.toml && echo "value=true" || echo "value=false" \
+            >> "$GITHUB_OUTPUT"
+
+      - id: nix_module
+        run: |
+          test -f nix/module.nix && echo "value=true" || echo "value=false" \
+            >> "$GITHUB_OUTPUT"
+
+      - id: tiers
+        run: |
+          matrix="[]"
+          for dir in unit integration e2e; do
+            if ls tests/$dir/test_*.py >/dev/null 2>&1; then
+              matrix=$(echo "$matrix" | jq --arg d "$dir" '. + [$d]')
+            fi
+          done
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+
+  nix-checks:
+    needs: detect
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-nix
+
+      - run: nix flake check
+
+      - run: nix build .#default
+
+  lint:
+    needs: detect
+    if: needs.detect.outputs.has_ruff == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-nix
+
+      - name: Check formatting
+        run: nix develop .#bootstrap --command uv run ruff format --check src/ tests/
+
+      - name: Lint
+        run: nix develop .#bootstrap --command uv run ruff check src/ tests/
+
+  typecheck:
+    needs: detect
+    if: needs.detect.outputs.has_mypy == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-nix
+
+      - run: nix develop .#bootstrap --command uv run mypy src/
+
+  test:
+    needs: [detect, nix-checks]
+    if: needs.detect.outputs.test_tiers != '[]'
+    strategy:
+      matrix:
+        tier: ${{ fromJson(needs.detect.outputs.test_tiers) }}
+      fail-fast: false
+    continue-on-error: ${{ matrix.tier != 'unit' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-nix
+
+      - name: Run ${{ matrix.tier }} tests
+        run: nix develop --command uv run pytest tests/${{ matrix.tier }} --cov --cov-report=xml
+
+      - name: Upload coverage
+        if: matrix.tier == 'unit'
+        uses: codecov/codecov-action@v5
+        with:
+          files: coverage.xml
+          fail_ci_if_error: false

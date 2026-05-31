@@ -1,0 +1,74 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  detect:
+    runs-on: ubuntu-latest
+    outputs:
+      has_cli: ${{ steps.cli.outputs.value }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: cli
+        run: |
+          value=false
+          if grep -Pq '^[a-zA-Z_][a-zA-Z0-9_-]*\s*=' pyproject.toml 2>/dev/null; then
+            value=true
+          fi
+          echo "value=$value" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: detect
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-nix
+
+      - run: nix build .#default
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tailscale-manager
+          path: result
+
+  publish-pypi:
+    needs: [detect, build]
+    if: needs.detect.outputs.has_cli == 'true'
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: tailscale-manager
+          path: dist
+
+      - uses: ./.github/actions/setup-nix
+
+      - name: Build and publish
+        run: |
+          nix develop .#bootstrap --command uv build
+          nix develop .#bootstrap --command uv publish
+        env:
+          UV_PUBLISH_TOKEN: ${{ secrets.PYPI_TOKEN }}
+
+  github-release:
+    needs: [detect, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: tailscale-manager
+          path: dist
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/**
+          generate_release_notes: true

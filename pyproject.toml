@@ -1,0 +1,68 @@
+[project]
+name = "tailscale-manager"
+version = "0.1.0"
+description = "NixOS module + CLI for managing Tailscale auth keys via Terraform"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Tailscale Manager", email = "maintainers@example.com" }]
+keywords = ["tailscale", "terraform", "nixos"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+]
+requires-python = ">=3.11"
+dependencies = [
+    "typer>=0.12",
+    "pydantic>=2.5",
+]
+
+[project.scripts]
+tailscale-manager = "tailscale_manager.cli:app"
+
+[project.optional-dependencies]
+tui = ["textual>=0.60"]
+dev = []
+
+[build-system]
+requires = ["setuptools>=75.8"]
+build-backend = "setuptools.build_meta"
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "pytest-cov>=5",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.uv]
+
+[tool.uv.sources]
+# my-lib = { git = "https://github.com/org/my-lib.git" }
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+ignore = []
+
+[tool.ruff.lint.isort]
+known-first-party = ["tailscale_manager"]
+
+[tool.mypy]
+strict = true
+python_version = "3.11"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v"
+
+[tool.coverage.run]
+source = ["src"]
+omit = ["tests/*"]
+
+[tool.coverage.report]
+show_missing = true

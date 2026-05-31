@@ -1,0 +1,67 @@
+# ── Python ──────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+*.whl
+*.manifest
+*.spec
+
+# ── Virtual environments ────────────────────────────
+.venv/
+.venv-*/
+venv/
+venv-*/
+env/
+.env/
+
+
+# ── Nix ─────────────────────────────────────────────
+result
+result-*
+/nix/store*
+/nix/var*
+
+# ── IDE / Editor ────────────────────────────────────
+.direnv/
+.vscode/
+.idea/
+.opencode/
+*.swp
+*.swo
+*~
+*.orig
+*.bak
+*.pyc
+.nsftools-cache/
+
+# ── OS ──────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.DS_Store
+
+# ── Testing & coverage ──────────────────────────────
+.pytest_cache/
+.coverage
+.coverage.*
+coverage/
+coverage.xml
+htmlcov/
+*.coverage
+.tox/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+
+# ── Documentation & build artifacts ─────────────────
+_site/
+site/
+docs/_build/
+*.mo
+*.pot
+
+# ── Project-specific ────────────────────────────────
+sqlite_mcp_server.db

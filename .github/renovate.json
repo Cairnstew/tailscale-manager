@@ -1,0 +1,28 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "labels": ["dependencies", "automated"],
+  "packageRules": [
+    {
+      "description": "Batch all Python (uv) dependency updates into a single PR",
+      "matchManagers": ["pep621", "pip_requirements"],
+      "groupName": "Python dependencies",
+      "automerge": true
+    },
+    {
+      "description": "Batch all Nix flake input updates into a single weekly PR",
+      "matchManagers": ["nix"],
+      "groupName": "Nix flake dependencies",
+      "schedule": ["before 6am on monday"]
+    },
+    {
+      "description": "Pin uv, pyproject-nix, and Nix tooling — manual bump only",
+      "matchDepNames": ["uv", "pyproject-nix", "pyproject-build-systems"],
+      "schedule": ["at any time"],
+      "automerge": false
+    }
+  ],
+  "nix": {
+    "enabled": true
+  }
+}
