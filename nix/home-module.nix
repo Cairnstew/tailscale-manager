@@ -11,9 +11,11 @@ in
 
     package = lib.mkOption {
       type = lib.types.package;
-      default = pkgs.tailscale-manager;
-      defaultText = lib.literalExpression "pkgs.tailscale-manager";
-      description = "Package providing the tailscale-manager CLI";
+      description = ''
+        Package providing the tailscale-manager CLI.
+        Set automatically when using the flake module via
+        homeManagerModules.default.
+      '';
     };
 
     tailnet = lib.mkOption {

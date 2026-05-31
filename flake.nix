@@ -95,9 +95,15 @@
         tailscale-manager = pythonSets.${prev.stdenv.hostPlatform.system}.pythonSet."tailscale-manager";
       };
 
-      nixosModules.default = import ./nix/module.nix;
+      nixosModules.default = { pkgs, ... }: {
+        imports = [ ./nix/module.nix ];
+        services.tailscale-manager.package = lib.mkDefault self.packages.${pkgs.system}.default;
+      };
 
-      homeManagerModules.default = import ./nix/home-module.nix;
+      homeManagerModules.default = { pkgs, ... }: {
+        imports = [ ./nix/home-module.nix ];
+        homeManagerModules.tailscale-manager.package = lib.mkDefault self.packages.${pkgs.system}.default;
+      };
 
       checks = forAllSystems (
         system:

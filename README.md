@@ -77,11 +77,24 @@ Managed keys: 1
 
 ### 2. Create an OAuth client
 
-1. Go to https://login.tailscale.com/admin/settings/oauth
-2. Create a client with **all** (read + write) scopes
-3. Under **Tag ownership**, add the tags this client can create keys with
-   (e.g. `tag:ci`, `tag:infra`)
-4. Save the client ID and secret
+1. Go to [Tailscale admin console → Settings → OAuth clients](https://login.tailscale.com/admin/settings/oauth)
+2. Click **Generate OAuth client**
+3. Under **Scopes**, enable:
+   - `auth_keys` — write access (required)
+   - `devices` — read access (optional, for TUI status)
+4. Under **Tag ownership**, add every tag you intend to pass via the
+   `tags` option (e.g. `tag:server`, `tag:ci`). The OAuth client **must**
+   own the tags it creates keys for — this is enforced by Tailscale and
+   will cause apply to fail if misconfigured.
+5. Save the **Client ID** and **Client Secret**
+6. Store them in your secrets manager (agenix/sops) as:
+   ```
+   TAILSCALE_OAUTH_CLIENT_ID=<client-id>
+   TAILSCALE_OAUTH_CLIENT_SECRET=<client-secret>
+   ```
+
+> **Important**: set `tailnet = "-"` in your module config to auto-resolve
+> the tailnet from the OAuth credential. This is the recommended value.
 
 ### 3. Configure the module
 
@@ -125,13 +138,16 @@ All options under `services.tailscale-manager`.
 |---|---|---|---|
 | `enable` | `bool` | `false` | Enable the tailscale-manager service |
 | `tailnet` | `string` | *(required)* | Tailnet name, e.g. `example.com`. Pass `"-"` to auto-resolve from the OAuth credential. |
-| `credentialsFile` | `path` | *(required)* | Path to an EnvironmentFile containing `TAILSCALE_OAUTH_CLIENT_ID` and `TAILSCALE_OAUTH_CLIENT_SECRET`. Encrypt with agenix or sops-nix. |
-| `tags` | `list of strings` | `[]` | Tags to apply to the managed auth key (e.g. `["tag:ci"]`). The OAuth client must own these tags. |
+| `credentialsFile` | `null or path` | `null` | *(required via assertion)* Path to an EnvironmentFile containing `TAILSCALE_OAUTH_CLIENT_ID` and `TAILSCALE_OAUTH_CLIENT_SECRET`. Encrypt with agenix or sops-nix. |
+| `tags` | `list of strings` | `[]` | Tags to apply to the managed auth key (e.g. `["tag:ci"]`). All tags must start with `tag:`. The OAuth client must own these tags. |
 | `stateDir` | `string` | `/var/lib/tailscale-manager` | Directory for Terraform state and backups |
-| `package` | `package` | `pkgs.tailscale-manager` | Package providing the CLI |
+| `package` | `package` | *(auto from flake)* | Package providing the CLI |
 | `terraformBin` | `path` | `"${pkgs.terraform}/bin/terraform"` | Path to the Terraform binary |
 | `backupCount` | `int` | `5` | Number of tfstate backups to retain in `stateDir/backups/` |
 | `watchCredentials` | `bool` | `true` | Create a systemd path unit that re-runs apply when `credentialsFile` changes |
+| `enableTimer` | `bool` | `false` | Enable a daily systemd timer to automatically re-run apply |
+| `recreateIfInvalid` | `enum` | `"always"` | Whether to recreate the key if invalid (`"always"` or `"never"`) |
+| `providerVersion` | `string` | `"~> 0.29"` | Tailscale Terraform provider version constraint |
 
 ### Systemd units
 
@@ -152,8 +168,9 @@ Three units are created when enabled:
 writes the file path changes. Re-triggers the service when
 `credentialsFile` changes via atomic rename (e.g. agenix rotation).
 
-**`tailscale-manager.timer`** — placeholder (commented out). Uncomment
-and configure `OnCalendar` for periodic apply if desired.
+**`tailscale-manager.timer`** — if `enableTimer = true`: runs the
+service daily via `OnCalendar=daily` with `Persistent=true`. Useful
+for catching drift or rotating keys near expiry.
 
 ### Activation script
 
@@ -257,7 +274,7 @@ tailscale-manager version       # show version
 ### Environment variables
 
 | Variable | Required | Default | Description |
-|---|---|---|---|
+|---|---|---|---|---|
 | `TAILSCALE_OAUTH_CLIENT_ID` | ✅ | — | Tailscale OAuth client ID |
 | `TAILSCALE_OAUTH_CLIENT_SECRET` | ✅ | — | Tailscale OAuth client secret |
 | `TAILSCALE_TAILNET` | ✅ | — | Tailnet name or `"-"` to auto-resolve |
@@ -265,6 +282,8 @@ tailscale-manager version       # show version
 | `TAILSCALE_MANAGER_TERRAFORM_BIN` | — | `terraform` | Terraform binary path |
 | `TAILSCALE_MANAGER_BACKUP_COUNT` | — | `5` | Number of backups to retain |
 | `TAILSCALE_MANAGER_TAGS` | — | `""` | Comma-separated tags, e.g. `tag:ci,tag:infra` |
+| `TAILSCALE_MANAGER_RECREATE_IF_INVALID` | — | `"always"` | Key rotation policy (`"always"` or `"never"`) |
+| `TAILSCALE_MANAGER_PROVIDER_VERSION` | — | `"~> 0.29"` | Tailscale Terraform provider version constraint |
 
 ### Exit codes
 

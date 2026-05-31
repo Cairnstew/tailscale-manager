@@ -11,9 +11,11 @@ in
 
     package = lib.mkOption {
       type = lib.types.package;
-      default = pkgs.tailscale-manager;
-      defaultText = lib.literalExpression "pkgs.tailscale-manager";
-      description = "Package providing the tailscale-manager CLI";
+      description = ''
+        Package providing the tailscale-manager CLI.
+        Set automatically when using the flake module via
+        nixosModules.default.
+      '';
     };
 
     stateDir = lib.mkOption {
@@ -23,13 +25,15 @@ in
     };
 
     credentialsFile = lib.mkOption {
-      type = lib.types.path;
+      type = lib.types.nullOr lib.types.path;
+      default = null;
       description = ''
         Path to an EnvironmentFile containing TAILSCALE_OAUTH_CLIENT_ID and
         TAILSCALE_OAUTH_CLIENT_SECRET. These are the canonical env var names
         that both the Python CLI and the Tailscale Terraform provider use.
         Use agenix or sops to encrypt this file.
       '';
+      example = "/run/secrets/tailscale-oauth";
     };
 
     tailnet = lib.mkOption {
@@ -47,7 +51,12 @@ in
     tags = lib.mkOption {
       type = lib.types.listOf lib.types.str;
       default = [ ];
-      description = "Tags to apply to the managed auth key (e.g. tag:infra)";
+      description = ''
+        Tags to apply to the managed auth key (e.g. tag:infra).
+        Set via TAILSCALE_MANAGER_TAGS as comma-separated values when
+        running outside NixOS: e.g. TAILSCALE_MANAGER_TAGS='tag:server,tag:ci'.
+        All tags must start with 'tag:' and must be owned by the OAuth client.
+      '';
     };
 
     backupCount = lib.mkOption {
@@ -65,9 +74,54 @@ in
         edits and atomic renames (the latter being how agenix writes secrets).
       '';
     };
+
+    enableTimer = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = ''
+        Enable a daily systemd timer to automatically re-run apply.
+        Useful for catching drift or rotating keys near expiry.
+        When false (default), apply only runs on nixos-rebuild switch
+        and credential file changes (if watchCredentials is true).
+      '';
+    };
+
+    recreateIfInvalid = lib.mkOption {
+      type = lib.types.enum [ "always" "never" ];
+      default = "always";
+      description = ''
+        Whether to recreate the managed auth key if it becomes invalid
+        (expired, revoked, or deleted). "always" enables automatic key
+        rotation. "never" requires manual intervention.
+      '';
+    };
+
+    providerVersion = lib.mkOption {
+      type = lib.types.str;
+      default = "~> 0.29";
+      description = "Tailscale Terraform provider version constraint.";
+    };
   };
 
   config = lib.mkIf cfg.enable {
+
+    assertions = [
+      {
+        assertion = cfg.credentialsFile != null;
+        message = ''
+          services.tailscale-manager.credentialsFile must be set.
+
+          Example with agenix:
+            credentialsFile = config.age.secrets.tailscale-oauth.path;
+          Example with sops-nix:
+            credentialsFile = config.sops.secrets.tailscale-oauth.path;
+
+          The file must be in EnvironmentFile format with these variables:
+            TAILSCALE_OAUTH_CLIENT_ID=<value>
+            TAILSCALE_OAUTH_CLIENT_SECRET=<value>
+        '';
+      }
+    ];
 
     environment.systemPackages = [ cfg.package ];
 
@@ -101,6 +155,8 @@ in
           "TAILSCALE_MANAGER_TERRAFORM_BIN=${cfg.terraformBin}"
           "TAILSCALE_MANAGER_BACKUP_COUNT=${toString cfg.backupCount}"
           "TAILSCALE_MANAGER_TAGS=${lib.concatStringsSep "," cfg.tags}"
+          "TAILSCALE_MANAGER_RECREATE_IF_INVALID=${cfg.recreateIfInvalid}"
+          "TAILSCALE_MANAGER_PROVIDER_VERSION=${cfg.providerVersion}"
         ];
         ExecStart = "${cfg.package}/bin/tailscale-manager apply";
         NoNewPrivileges = true;
@@ -123,17 +179,15 @@ in
       };
     };
 
-    # Timer placeholder — uncomment and configure for periodic apply:
-    # systemd.timers.tailscale-manager = {
-    #   description = "Periodic Tailscale auth key sync";
-    #   wantedBy = [ "timers.target" ];
-    #   partOf = [ "timers.target" ];
-    #   timerConfig = {
-    #     OnCalendar = "daily";
-    #     Persistent = true;
-    #   };
-    # };
+    systemd.timers.tailscale-manager = lib.mkIf cfg.enableTimer {
+      description = "Daily Tailscale manager apply timer";
+      wantedBy = [ "timers.target" ];
+      timerConfig = {
+        OnCalendar = "daily";
+        Persistent = true;
+        Unit = "tailscale-manager.service";
+      };
+    };
 
   };
-
 }

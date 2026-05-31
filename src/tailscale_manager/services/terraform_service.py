@@ -9,7 +9,6 @@ from tailscale_manager.core.config import AppConfig
 from tailscale_manager.core.constants import (
     BACKUP_DIR,
     MAIN_TF_FILE,
-    PROVIDER_VERSION,
     STATE_FILE,
 )
 from tailscale_manager.core.exceptions import TerraformError
@@ -22,7 +21,8 @@ class TerraformService:
         self.config = config
         self.state_repo = StateRepository(config.state_dir)
 
-    def generate_config(self) -> Path:
+    def write_config(self) -> bool:
+        """Write main.tf.json. Returns True if written, False if unchanged."""
         self.config.state_dir.mkdir(parents=True, exist_ok=True)
         tf_path = self.config.state_dir / MAIN_TF_FILE
 
@@ -33,7 +33,7 @@ class TerraformService:
                 "required_providers": {
                     "tailscale": {
                         "source": "tailscale/tailscale",
-                        "version": PROVIDER_VERSION,
+                        "version": self.config.provider_version,
                     }
                 }
             },
@@ -47,14 +47,21 @@ class TerraformService:
                         "ephemeral": False,
                         "preauthorized": True,
                         "tags": tags,
-                        "recreate_if_invalid": "always",
+                        "recreate_if_invalid": self.config.recreate_if_invalid,
                     }
                 }
             },
         }
 
-        tf_path.write_text(json.dumps(cfg, indent=2) + "\n")
-        return tf_path
+        new_content = json.dumps(cfg, indent=2) + "\n"
+
+        if tf_path.exists():
+            existing = tf_path.read_text()
+            if existing == new_content:
+                return False
+
+        tf_path.write_text(new_content)
+        return True
 
     def init(self) -> str:
         return run_terraform(
@@ -75,7 +82,7 @@ class TerraformService:
         timestamp = datetime.now(timezone.utc).isoformat()
         try:
             self._backup_state()
-            self.generate_config()
+            self.write_config()
             self.init()
             run_terraform(
                 self.config.terraform_bin,

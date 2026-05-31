@@ -30,6 +30,14 @@ nix build .#default
 nix flake check
 ```
 
+## Pre-commit hooks
+
+```bash
+nix develop .#bootstrap --command pre-commit install
+```
+
+Runs ruff and mypy on every commit automatically.
+
 ## Layer conventions
 
 Follow the import direction rules in `AGENTS.md`:
