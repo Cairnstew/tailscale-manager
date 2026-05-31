@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from tailscale_manager.models.settings import TailnetSettings
 
@@ -91,7 +91,16 @@ class AppConfig(BaseModel):
     )
     acl_policy: str = Field(
         default="",
-        description="Full ACL policy string (HuJSON or JSON). Configurable via NixOS only.",
+        description="Full ACL policy string (HuJSON or JSON). Populated from acl_policy_path if set.",
+    )
+    acl_policy_path: Path | None = Field(
+        default=None,
+        validation_alias="TAILSCALE_MANAGER_ACL_POLICY_PATH",
+        description=(
+            "Path to a file containing the ACL policy JSON. "
+            "Set via TAILSCALE_MANAGER_ACL_POLICY_PATH. "
+            "If set, the file content is loaded into acl_policy."
+        ),
     )
 
     @field_validator("tags")
@@ -105,6 +114,14 @@ class AppConfig(BaseModel):
                 f"Example: ['tag:server', 'tag:ci']"
             )
         return v
+
+    @model_validator(mode="after")
+    def load_policy_file(self) -> AppConfig:
+        if self.acl_policy_path is not None:
+            path = Path(self.acl_policy_path)
+            if path.exists():
+                self.acl_policy = path.read_text()
+        return self
 
     @classmethod
     def from_env(cls) -> AppConfig:
@@ -154,6 +171,11 @@ class AppConfig(BaseModel):
             "TAILSCALE_MANAGER_ACL_FORMAT", "hujson"
         )
 
+        acl_policy_path_raw = os.environ.get(
+            "TAILSCALE_MANAGER_ACL_POLICY_PATH", ""
+        )
+        acl_policy_path = Path(acl_policy_path_raw) if acl_policy_path_raw else None
+
         return cls(
             tailnet=tailnet,
             state_dir=state_dir,
@@ -166,6 +188,7 @@ class AppConfig(BaseModel):
             dns_magic_dns=dns_magic_dns,
             acl_enable=acl_enable,
             acl_format=acl_format,
+            acl_policy_path=acl_policy_path,
         )
 
 

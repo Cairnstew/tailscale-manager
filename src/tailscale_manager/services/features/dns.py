@@ -22,8 +22,9 @@ def build_dns_config(
 
     for domain, ns_list in split_nameservers.items():
         safe_name = domain.replace(".", "_").replace("-", "_")
-        cfg[f"tailscale_dns_split_nameservers_{safe_name}"] = {
-            "domain": {"domain": domain, "nameservers": ns_list}
+        cfg.setdefault("tailscale_dns_split_nameservers", {})[safe_name] = {
+            "domain": domain,
+            "nameservers": ns_list,
         }
 
     return {"resource": cfg}

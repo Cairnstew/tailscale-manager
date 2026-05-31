@@ -50,6 +50,11 @@ Complexity, fragility, and change-frequency ranking for every file in this proje
 | `HEATMAP.md` | 🟢 Low | This file. Updated when project structure meaningfully changes. |
 | `STRUCTURE.md` | 🟢 Low | Structure doc. Updated when layout changes. |
 | `AGENTS.md` | 🟢 Low | Agent instructions. Changes when project conventions shift. |
+| `docs/POLICY.md` | 🟢 Low | Policy file index — updated when policy/ directory structure changes. |
+| `docs/policy/` (16 files) | 🟢 Low | Policy file deep reference. Updated when upstream syntax changes. |
+| `docs/OAUTH.md` | 🟢 Low | OAuth client reference. Updated when scope model changes. |
+| `docs/API.md` | 🟢 Low | API endpoint reference. Updated when new endpoints or scopes are relevant. |
+| `docs/CONCEPTS.md` | 🟢 Low | Terminology reference. Stable — updated only when project scope shifts. |
 | `.github/actions/setup-nix/action.yml` | 🟢 Low | Reusable Nix setup — stable once configured. |
 | `.github/workflows/ci.yml` | 🟡 Medium | CI pipeline — changes when tooling or tier structure changes. Silent failures if workflow YAML is wrong. |
 | `.github/workflows/release.yml` | 🟢 Low | Release automation — rarely touched after setup. |

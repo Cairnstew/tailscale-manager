@@ -583,6 +583,15 @@ For a full list of gotchas, see [`GOTCHAS.md`](./GOTCHAS.md).
 
 ---
 
+## Reference documentation
+
+In-repo reference docs covering Tailscale concepts, syntax, and API:
+
+- [`docs/POLICY.md`](./docs/POLICY.md) — Tailnet policy file syntax (grants, ACLs, SSH, tag ownership)
+- [`docs/OAUTH.md`](./docs/OAUTH.md) — OAuth clients & trust credentials
+- [`docs/API.md`](./docs/API.md) — Tailscale API endpoints, scopes, and Terraform mapping
+- [`docs/CONCEPTS.md`](./docs/CONCEPTS.md) — Terminology and concepts
+
 ## Related resources
 
 - [Tailscale Terraform provider docs](https://registry.terraform.io/providers/tailscale/tailscale)

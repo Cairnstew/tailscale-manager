@@ -42,6 +42,17 @@ If `flake.nix` uses `pkgs.python3` but `pyproject.toml` says `requires-python = 
 ### Flake lock drift
 After changing flake inputs, run `nix flake lock` to update `flake.lock`. Otherwise you'll silently use the old pinned versions.
 
+## Policy serialization: filterAttrs vs filterAttrsRecursive
+
+Use `lib.filterAttrs` (non-recursive) for the top-level policy cleanup,
+not `lib.filterAttrsRecursive`. The recursive variant descends into nested
+attrsets and removes empty lists, which drops semantically meaningful entries
+like `tagOwners."tag:server" = []` (a tag with no owners is valid and distinct
+from an unmanaged tag).
+
+Rule: only strip null/empty at the top level. Never filter recursively into
+policy section values.
+
 ## Tailscale Manager
 
 ### terraform binary not in Python deps

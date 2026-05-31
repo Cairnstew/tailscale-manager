@@ -14,6 +14,26 @@ Python project managed with `uv2nix` — uv's `uv.lock` drives Nix derivations v
 | `STRUCTURE.md` | Project structure, architecture diagram, devShells & packages |
 | `TESTS.md` | Test tier layout, design decisions, and conventions |
 | `AGENTS.md` | This file — agent instructions |
+| `docs/POLICY.md` | Tailnet policy file index — points into `docs/policy/` |
+| `docs/policy/README.md` | Policy file overview, format, and complete JSON skeleton |
+| `docs/policy/grants.md` | Grants syntax (preferred access control) |
+| `docs/policy/acls.md` | ACL rule syntax |
+| `docs/policy/ssh.md` | Tailscale SSH rules |
+| `docs/policy/tag-owners.md` | Tag ownership declarations |
+| `docs/policy/groups.md` | Named user groups |
+| `docs/policy/hosts.md` | Named IP/CIDR aliases |
+| `docs/policy/ipsets.md` | Named IP collection sets |
+| `docs/policy/postures.md` | Device posture conditions |
+| `docs/policy/node-attrs.md` | Per-device attributes (funnel, NextDNS, etc.) |
+| `docs/policy/auto-approvers.md` | Route/exit node auto-approval |
+| `docs/policy/tests.md` | ACL/grant/SSH assertion tests |
+| `docs/policy/network-options.md` | DERP, IPv4, CGNAT, client port options |
+| `docs/policy/autogroups.md` | Complete autogroup reference with plan availability |
+| `docs/policy/selectors.md` | All source/destination selector types |
+| `docs/policy/users.md` | User identity formats |
+| `docs/OAUTH.md` | OAuth clients & trust credentials reference |
+| `docs/API.md` | Tailscale API endpoint and scope reference |
+| `docs/CONCEPTS.md` | Tailscale terminology and concepts reference |
 
 ## Key files
 

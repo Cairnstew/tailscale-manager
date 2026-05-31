@@ -90,6 +90,29 @@
 │       ├── assertions.py
 │       └── builders.py
 │
+├── docs/                     # Tailscale reference documentation
+│   ├── POLICY.md             #   Policy file index — entry point into docs/policy/
+│   ├── OAUTH.md              #   OAuth clients & trust credentials
+│   ├── API.md                #   Tailscale API endpoints & scopes
+│   ├── CONCEPTS.md           #   Terminology and concepts
+│   └── policy/               #   Policy file deep reference (16 files)
+│       ├── README.md         #     Overview, format, JSON skeleton
+│       ├── grants.md         #     Grants syntax
+│       ├── acls.md           #     ACL rules
+│       ├── ssh.md            #     Tailscale SSH
+│       ├── tag-owners.md     #     Tag ownership
+│       ├── groups.md         #     Named user groups
+│       ├── hosts.md          #     Named IP/CIDR aliases
+│       ├── ipsets.md         #     Named IP collections
+│       ├── postures.md       #     Device posture conditions
+│       ├── node-attrs.md     #     Per-device attributes
+│       ├── auto-approvers.md #     Route/exit node auto-approval
+│       ├── tests.md          #     Assertion tests
+│       ├── network-options.md#     DERP, IPv4, CGNAT, client port
+│       ├── autogroups.md     #     Autogroup reference
+│       ├── selectors.md      #     Selector types reference
+│       └── users.md          #     User identity formats
+│
 ├── UV2NIX.md                 # uv2nix reference & lookup table
 ├── AGENTS.md                 # Instructions for AI coding agents
 ├── GOTCHAS.md                # Common pitfalls

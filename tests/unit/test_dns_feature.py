@@ -33,10 +33,12 @@ def test_build_dns_config_split_single() -> None:
         split_nameservers={"corp.example.com": ["10.0.0.53"]},
     )
     assert "resource" in cfg
-    key = "tailscale_dns_split_nameservers_corp_example_com"
-    assert key in cfg["resource"]
-    assert cfg["resource"][key]["domain"]["domain"] == "corp.example.com"
-    assert cfg["resource"][key]["domain"]["nameservers"] == ["10.0.0.53"]
+    assert "tailscale_dns_split_nameservers" in cfg["resource"]
+    entries = cfg["resource"]["tailscale_dns_split_nameservers"]
+    assert entries["corp_example_com"] == {
+        "domain": "corp.example.com",
+        "nameservers": ["10.0.0.53"],
+    }
 
 
 def test_build_dns_config_split_multiple() -> None:
@@ -49,8 +51,18 @@ def test_build_dns_config_split_multiple() -> None:
         },
     )
     assert "resource" in cfg
-    assert "tailscale_dns_split_nameservers_corp_example_com" in cfg["resource"]
-    assert "tailscale_dns_split_nameservers_internal_net_local" in cfg["resource"]
+    assert "tailscale_dns_split_nameservers" in cfg["resource"]
+    entries = cfg["resource"]["tailscale_dns_split_nameservers"]
+    assert "corp_example_com" in entries
+    assert entries["corp_example_com"] == {
+        "domain": "corp.example.com",
+        "nameservers": ["10.0.0.53"],
+    }
+    assert "internal_net_local" in entries
+    assert entries["internal_net_local"] == {
+        "domain": "internal-net.local",
+        "nameservers": ["10.0.0.54", "10.0.0.55"],
+    }
 
 
 def test_build_dns_config_split_sanitization() -> None:
@@ -64,10 +76,12 @@ def test_build_dns_config_split_sanitization() -> None:
         },
     )
     keys = list(cfg["resource"].keys())
-    assert "tailscale_dns_split_nameservers_corp_example_com" in keys
-    assert "tailscale_dns_split_nameservers_internal_net_local" in keys
-    assert "tailscale_dns_split_nameservers_corp.example.com" not in keys
-    assert "tailscale_dns_split_nameservers_internal-net.local" not in keys
+    assert "tailscale_dns_split_nameservers" in keys
+    entries = cfg["resource"]["tailscale_dns_split_nameservers"]
+    assert "corp_example_com" in entries
+    assert "internal_net_local" in entries
+    assert "corp.example.com" not in entries
+    assert "internal-net.local" not in entries
 
 
 def test_build_dns_config_all_features() -> None:
@@ -79,7 +93,12 @@ def test_build_dns_config_all_features() -> None:
     assert "resource" in cfg
     assert "tailscale_dns_nameservers" in cfg["resource"]
     assert "tailscale_dns_preferences" in cfg["resource"]
-    assert "tailscale_dns_split_nameservers_corp_example_com" in cfg["resource"]
+    assert "tailscale_dns_split_nameservers" in cfg["resource"]
+    entries = cfg["resource"]["tailscale_dns_split_nameservers"]
+    assert entries["corp_example_com"] == {
+        "domain": "corp.example.com",
+        "nameservers": ["10.0.0.53"],
+    }
 
 
 def test_build_dns_config_preferences_emitted_for_magic_dns_only() -> None:

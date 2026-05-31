@@ -8,7 +8,8 @@ def build_acl_config(enable: bool, fmt: str, policy: str) -> dict:
         "resource": {
             "tailscale_acl": {
                 "tailnet_policy": {
-                    "acl": policy
+                    "acl": policy,
+                    "overwrite_existing_content": True,
                 }
             }
         }

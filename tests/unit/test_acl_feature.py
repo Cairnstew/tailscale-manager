@@ -15,7 +15,8 @@ def test_build_acl_config_enabled_hujson() -> None:
         "resource": {
             "tailscale_acl": {
                 "tailnet_policy": {
-                    "acl": policy
+                    "acl": policy,
+                    "overwrite_existing_content": True,
                 }
             }
         }

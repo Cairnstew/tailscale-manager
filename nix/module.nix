@@ -2,11 +2,106 @@
 
 let
   cfg = config.services.tailscale-manager;
-in
 
+  # ── Policy type helpers ────────────────────────────────────────────
+
+  # App capabilities: "tailscale.com/cap/<name>" → list of opaque objects.
+  # Each inner object is schema-less — the application defines its shape.
+  appCapabilityType = lib.types.attrsOf (lib.types.listOf (
+    lib.types.submodule {
+      freeformType = lib.types.attrs;
+      description = ''
+        Application-defined capability parameter object.
+        Schema depends on the capability:
+          tailscale.com/cap/tailsql    → { dataSrc = ["*"] }
+          tailscale.com/cap/golink     → { admin = true }
+          tailscale.com/cap/kubernetes → { impersonate.groups = ["system:masters"] }
+      '';
+    }
+  ));
+
+  # DERP region node
+  derpNodeType = lib.types.submodule {
+    options = {
+      name = lib.mkOption {
+        type = lib.types.str;
+        description = "Node name (e.g. '1')";
+      };
+      regionID = lib.mkOption {
+        type = lib.types.int;
+        description = "Must match parent region regionID";
+      };
+      hostName = lib.mkOption {
+        type = lib.types.str;
+        description = "FQDN of the DERP relay (e.g. derp.example.com)";
+      };
+      stunPort = lib.mkOption {
+        type = lib.types.int;
+        default = 3478;
+        description = "STUN port for NAT detection";
+      };
+      stunOnly = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = "Set true for STUN-only nodes (no relay)";
+      };
+    };
+  };
+
+  # DERP region
+  derpRegionType = lib.types.submodule {
+    options = {
+      regionID = lib.mkOption {
+        type = lib.types.int;
+        description = "Numeric region ID (e.g. 900)";
+      };
+      regionCode = lib.mkOption {
+        type = lib.types.str;
+        description = "Short region code (e.g. 'my-region')";
+      };
+      regionName = lib.mkOption {
+        type = lib.types.str;
+        description = "Human-readable region name";
+      };
+      nodes = lib.mkOption {
+        type = lib.types.listOf derpNodeType;
+        description = "DERP relay nodes in this region";
+      };
+    };
+  };
+
+  # ── Serialization ────────────────────────────────────────────────
+
+  policyToJSON = policy:
+    let
+      withoutEnable = builtins.removeAttrs policy [ "enable" ];
+      # Top-level-only filter.  NOT recursive: we must not reach into
+      # nested attrsets (tagOwners, groups, …) because empty-list
+      # values are semantically meaningful there (e.g.
+      #   "tag:server" = []
+      # means "admin-only tag").  Inside lists (grants, ssh, …) the
+      # submodule defaults are harmless — Tailscale ignores
+      # null / [] / {} in those positions.
+      cleaned = lib.filterAttrs
+        (name: value: value != [] && value != {} && value != null)
+        withoutEnable;
+    in builtins.toJSON cleaned;
+
+  policyFile =
+    if cfg.policy.enable then
+      pkgs.writeText "tailscale-policy.json" (policyToJSON cfg.policy)
+    else if cfg.acl.policy != "" then
+      pkgs.writeText "tailscale-policy.json" cfg.acl.policy
+    else
+      null;
+
+  hasPolicyFile = policyFile != null;
+
+in
 {
 
   options.services.tailscale-manager = {
+
     enable = lib.mkEnableOption "Tailscale auth key manager";
 
     package = lib.mkOption {
@@ -149,7 +244,11 @@ in
       policy = lib.mkOption {
         type = lib.types.str;
         default = "";
-        description = "Full ACL policy string (HuJSON or JSON). Must be valid for the chosen format.";
+        description = ''
+          DEPRECATED: use services.tailscale-manager.policy (structured) instead.
+          Full ACL policy string (HuJSON or JSON). Must be valid for the chosen format.
+          If both policy.enable and this option are set, an assertion error is raised.
+        '';
         example = ''
           {
             "acls": [{ "action": "accept", "src": ["autogroup:member"], "dst": ["autogroup:member:*"] }]
@@ -217,6 +316,380 @@ in
       default = null;
       description = "Declarative tailnet-wide settings. Active when non-null.";
     };
+
+    # ── Structured policy ──────────────────────────────────────────────
+
+    policy = {
+      enable = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = ''
+          Enable the structured tailnet policy options below.
+
+          When true, the options in policy.{grants,acls,ssh,...} are serialized
+          to JSON and passed to tailscale-manager. This replaces the raw string
+          policy in acl.policy — do not set both.
+        '';
+      };
+
+      grants = lib.mkOption {
+        type = lib.types.listOf (lib.types.submodule {
+          options = {
+            src = lib.mkOption {
+              type = lib.types.listOf lib.types.str;
+              description = "Source selectors (users, groups, tags, autogroups)";
+              example = ["group:engineering"];
+            };
+            dst = lib.mkOption {
+              type = lib.types.listOf lib.types.str;
+              description = "Destination selectors";
+              example = ["tag:server"];
+            };
+            ip = lib.mkOption {
+              type = lib.types.listOf lib.types.str;
+              default = [];
+              description = "Network-layer capability selectors (ports/protocols)";
+              example = ["*" "tcp:443"];
+            };
+            app = lib.mkOption {
+              type = lib.types.nullOr appCapabilityType;
+              default = null;
+              description = "Application-layer capabilities (e.g. tailsql, golink)";
+              example = {
+                "tailscale.com/cap/tailsql" = [
+                  { dataSrc = ["*"]; }
+                ];
+              };
+            };
+            srcPosture = lib.mkOption {
+              type = lib.types.listOf lib.types.str;
+              default = [];
+              description = "Posture conditions restricting the source";
+              example = ["posture:latestMac"];
+            };
+            via = lib.mkOption {
+              type = lib.types.listOf lib.types.str;
+              default = [];
+              description = "Route traffic through specific exit nodes or subnet routers";
+              example = ["tag:corp-exit"];
+            };
+          };
+        });
+        default = [];
+        description = "Grant entries — the preferred access control mechanism";
+      };
+
+      acls = lib.mkOption {
+        type = lib.types.listOf (lib.types.submodule {
+          options = {
+            action = lib.mkOption {
+              type = lib.types.enum ["accept"];
+              description = "Rule action (only 'accept' — Tailscale is deny-by-default)";
+            };
+            src = lib.mkOption {
+              type = lib.types.listOf lib.types.str;
+              description = "Source selectors";
+              example = ["autogroup:member"];
+            };
+            proto = lib.mkOption {
+              type = lib.types.nullOr lib.types.str;
+              default = null;
+              description = "Protocol filter. Omit for all TCP+UDP";
+              example = "tcp";
+            };
+            dst = lib.mkOption {
+              type = lib.types.listOf lib.types.str;
+              description = "Destinations in host:port format";
+              example = ["autogroup:member:*"];
+            };
+          };
+        });
+        default = [];
+        description = "ACL rules (legacy — prefer grants for new policies)";
+      };
+
+      ssh = lib.mkOption {
+        type = lib.types.listOf (lib.types.submodule {
+          options = {
+            action = lib.mkOption {
+              type = lib.types.enum ["accept" "check"];
+              description = "accept = allow, check = allow with periodic re-auth";
+            };
+            src = lib.mkOption {
+              type = lib.types.listOf lib.types.str;
+              description = "SSH client selectors";
+              example = ["autogroup:member"];
+            };
+            dst = lib.mkOption {
+              type = lib.types.listOf lib.types.str;
+              description = "SSH destination selectors";
+              example = ["autogroup:self"];
+            };
+            users = lib.mkOption {
+              type = lib.types.nullOr (lib.types.listOf lib.types.str);
+              default = null;
+              description = "Allowed SSH usernames on the destination (null = connecting user's login)";
+              example = ["autogroup:nonroot" "root"];
+            };
+            checkPeriod = lib.mkOption {
+              type = lib.types.nullOr lib.types.str;
+              default = null;
+              description = "Re-auth interval for 'check' action (e.g. '12h', '90m', 'always')";
+              example = "12h";
+            };
+            acceptEnv = lib.mkOption {
+              type = lib.types.nullOr (lib.types.listOf lib.types.str);
+              default = null;
+              description = "Environment variable patterns clients can forward via SendEnv";
+              example = ["FOO_*"];
+            };
+            srcPosture = lib.mkOption {
+              type = lib.types.listOf lib.types.str;
+              default = [];
+              description = "Posture conditions restricting the SSH client";
+              example = ["posture:latestMac"];
+            };
+          };
+        });
+        default = [];
+        description = "Tailscale SSH rules — require matching ACL or grant for port 22";
+      };
+
+      tagOwners = lib.mkOption {
+        type = lib.types.attrsOf (lib.types.listOf lib.types.str);
+        default = {};
+        description = "Who can assign each tag to a device. Empty list = admin-only.";
+        example = {
+          "tag:ci" = ["autogroup:admin"];
+          "tag:server" = [];
+        };
+      };
+
+      groups = lib.mkOption {
+        type = lib.types.attrsOf (lib.types.listOf lib.types.str);
+        default = {};
+        description = "Named groups of users. Groups cannot contain other groups.";
+        example = {
+          "group:engineering" = ["alice@example.com" "bob@example.com"];
+          "group:sre" = ["carol@example.com"];
+        };
+      };
+
+      hosts = lib.mkOption {
+        type = lib.types.attrsOf lib.types.str;
+        default = {};
+        description = "Named IP/CIDR aliases for use in access rules";
+        example = {
+          "jump-box" = "100.100.100.100";
+          "office-net" = "203.0.113.0/24";
+        };
+      };
+
+      ipsets = lib.mkOption {
+        type = lib.types.attrsOf (lib.types.listOf lib.types.str);
+        default = {};
+        description = "Named IP collections. Can reference other ipsets, hosts, CIDRs, or IPs.";
+        example = {
+          "ipset:prod" = ["10.0.1.0/24" "10.0.2.0/24"];
+          "ipset:all-regions" = ["ipset:us-east" "ipset:us-west"];
+        };
+      };
+
+      postures = lib.mkOption {
+        type = lib.types.attrsOf (lib.types.listOf lib.types.str);
+        default = {};
+        description = "Device posture condition expressions";
+        example = {
+          "posture:latestMac" = [
+            "node:os IN ['macos']"
+            "node:tsReleaseTrack == 'stable'"
+          ];
+        };
+      };
+
+      nodeAttrs = lib.mkOption {
+        type = lib.types.listOf (lib.types.submodule {
+          options = {
+            target = lib.mkOption {
+              type = lib.types.listOf lib.types.str;
+              description = "Which nodes the attributes apply to";
+              example = ["tag:server"];
+            };
+            attr = lib.mkOption {
+              type = lib.types.nullOr (lib.types.listOf lib.types.str);
+              default = null;
+              description = "Device attributes (funnel, nextdns:<id>, disable-ipv4, etc.)";
+              example = ["funnel"];
+            };
+            app = lib.mkOption {
+              type = lib.types.nullOr appCapabilityType;
+              default = null;
+              description = "App-layer capabilities (app connectors)";
+              example = {
+                "tailscale.com/app-connectors" = [
+                  {
+                    name = "internal-apps";
+                    connectors = ["tag:app-connector"];
+                    domains = ["internal.example.com"];
+                    routes = ["10.0.0.0/8"];
+                  }
+                ];
+              };
+            };
+          };
+        });
+        default = [];
+        description = "Per-device attributes (NextDNS, Funnel, randomize-client-port, app connectors)";
+      };
+
+      autoApprovers = lib.mkOption {
+        type = lib.types.submodule {
+          options = {
+            routes = lib.mkOption {
+              type = lib.types.attrsOf (lib.types.listOf lib.types.str);
+              default = {};
+              description = "CIDR range → authorized approvers";
+              example = {
+                "10.0.0.0/8" = ["group:neteng"];
+              };
+            };
+            exitNode = lib.mkOption {
+              type = lib.types.listOf lib.types.str;
+              default = [];
+              description = "Authorized approvers for exit node advertisements";
+              example = ["tag:corp-exit"];
+            };
+            appConnector = lib.mkOption {
+              type = lib.types.listOf lib.types.str;
+              default = [];
+              description = "Authorized approvers for app connector advertisements";
+              example = ["tag:app-connector-manager"];
+            };
+          };
+        };
+        default = {};
+        description = "Users/groups/tags that can bypass approval for routes and exit nodes";
+      };
+
+      tests = lib.mkOption {
+        type = lib.types.listOf (lib.types.submodule {
+          options = {
+            src = lib.mkOption {
+              type = lib.types.str;
+              description = "Source identity to test from (user, group, tag, or host)";
+              example = "alice@example.com";
+            };
+            srcPostureAttrs = lib.mkOption {
+              type = lib.types.nullOr (lib.types.attrsOf lib.types.str);
+              default = null;
+              description = "Posture attributes to simulate for this test";
+              example = { "node:os" = "windows"; };
+            };
+            proto = lib.mkOption {
+              type = lib.types.nullOr lib.types.str;
+              default = null;
+              description = "Protocol to test (tcp, udp, icmp). Defaults to TCP+UDP.";
+              example = "tcp";
+            };
+            accept = lib.mkOption {
+              type = lib.types.listOf lib.types.str;
+              default = [];
+              description = "Destinations that should be reachable for src";
+              example = ["tag:prod:22"];
+            };
+            deny = lib.mkOption {
+              type = lib.types.listOf lib.types.str;
+              default = [];
+              description = "Destinations that should be blocked for src";
+              example = ["tag:prod:3389"];
+            };
+          };
+        });
+        default = [];
+        description = "ACL/grant assertion tests — policy is rejected if they fail";
+      };
+
+      sshTests = lib.mkOption {
+        type = lib.types.listOf (lib.types.submodule {
+          options = {
+            src = lib.mkOption {
+              type = lib.types.str;
+              description = "SSH client identity";
+              example = "sre-lead@example.com";
+            };
+            dst = lib.mkOption {
+              type = lib.types.listOf lib.types.str;
+              description = "SSH destinations";
+              example = ["tag:prod"];
+            };
+            accept = lib.mkOption {
+              type = lib.types.listOf lib.types.str;
+              default = [];
+              description = "SSH usernames that should be accepted without checks";
+              example = ["root"];
+            };
+            check = lib.mkOption {
+              type = lib.types.listOf lib.types.str;
+              default = [];
+              description = "SSH usernames that should require re-auth checks";
+              example = ["admin"];
+            };
+            deny = lib.mkOption {
+              type = lib.types.listOf lib.types.str;
+              default = [];
+              description = "SSH usernames that should be denied";
+              example = ["alice"];
+            };
+            srcPostureAttrs = lib.mkOption {
+              type = lib.types.nullOr (lib.types.attrsOf lib.types.str);
+              default = null;
+              description = "Posture attributes to simulate for this test";
+              example = { "node:os" = "windows"; };
+            };
+          };
+        });
+        default = [];
+        description = "SSH assertion tests — policy is rejected if they fail";
+      };
+
+      derpMap = lib.mkOption {
+        type = lib.types.nullOr (lib.types.submodule {
+          options = {
+            omitDefaultRegions = lib.mkOption {
+              type = lib.types.bool;
+              default = false;
+              description = "Set true to disable Tailscale-provided DERP servers";
+            };
+            regions = lib.mkOption {
+              type = lib.types.attrsOf derpRegionType;
+              default = {};
+              description = "Custom DERP regions (map of regionID → region config)";
+            };
+          };
+        });
+        default = null;
+        description = "Custom DERP relay server configuration";
+      };
+
+      disableIPv4 = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = "Stop assigning IPv4 Tailscale addresses (100.x.y.z)";
+      };
+
+      randomizeClientPort = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = "Use random WireGuard port instead of 41641";
+      };
+
+      oneCGNATRoute = lib.mkOption {
+        type = lib.types.str;
+        default = "";
+        description = "CGNAT route behavior: '' (default), 'mac-always', or 'mac-never'";
+        example = "mac-always";
+      };
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -235,6 +708,22 @@ in
           The file must be in EnvironmentFile format with these variables:
             TAILSCALE_OAUTH_CLIENT_ID=<value>
             TAILSCALE_OAUTH_CLIENT_SECRET=<value>
+        '';
+      }
+      {
+        assertion = !(cfg.policy.enable && cfg.acl.policy != "");
+        message = ''
+          services.tailscale-manager.policy (structured) and
+          services.tailscale-manager.acl.policy (raw string) are both set.
+          Use only one. The structured policy takes precedence when enabled.
+        '';
+      }
+      {
+        assertion = !cfg.policy.enable || cfg.acl.enable;
+        message = ''
+          services.tailscale-manager.policy is enabled but
+          services.tailscale-manager.acl.enable is false.
+          Set acl.enable = true to manage the tailnet policy.
         '';
       }
     ];
@@ -277,7 +766,7 @@ in
           "TAILSCALE_MANAGER_DNS_MAGIC_DNS=${if cfg.dns.magicDns then "true" else "false"}"
           "TAILSCALE_MANAGER_ACL_ENABLE=${if cfg.acl.enable then "true" else "false"}"
           "TAILSCALE_MANAGER_ACL_FORMAT=${cfg.acl.format}"
-        ];
+        ] ++ lib.optional hasPolicyFile "TAILSCALE_MANAGER_ACL_POLICY_PATH=${policyFile}";
         ExecStart = "${cfg.package}/bin/tailscale-manager apply";
         NoNewPrivileges = true;
         ProtectSystem = "strict";
