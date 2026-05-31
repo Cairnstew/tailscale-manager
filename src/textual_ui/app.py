@@ -11,6 +11,7 @@ from textual.widgets import DataTable, Footer, Header, Static, TextArea
 
 from tailscale_manager.core.config import AppConfig
 from tailscale_manager.models.auth_key import TailscaleAuthKey
+from tailscale_manager.models.device import TailscaleDevice
 from tailscale_manager.repositories.state_repository import StateRepository
 
 
@@ -79,6 +80,10 @@ class SystemStatus(Static):
             bcount = 0
         lines.append(f"Backups: {bcount} retained")
 
+        repo = StateRepository(self.config.state_dir)
+        device_count = len(repo.get_devices())
+        lines.append(f"Devices: {device_count} discovered")
+
         lines.append("")
         lines.append(f"State dir: {self.config.state_dir}")
         lines.append(f"Tailnet: {self.config.tailnet}")
@@ -115,17 +120,28 @@ class TailscaleManagerApp(TextualAppBase):
     }
 
     .left-panel {
-        width: 60%;
+        width: 40%;
+        height: 100%;
+        border: solid $primary;
+        padding: 0 1;
+    }
+
+    .center-panel {
+        width: 35%;
         height: 100%;
         border: solid $primary;
         padding: 0 1;
     }
 
     .right-panel {
-        width: 40%;
+        width: 25%;
         height: 100%;
         border: solid $primary;
         padding: 0 1;
+    }
+
+    .hidden {
+        display: none;
     }
     """
 
@@ -133,6 +149,7 @@ class TailscaleManagerApp(TextualAppBase):
         ("q", "quit", "Quit"),
         ("r", "refresh", "Refresh"),
         ("l", "view_logs", "View Logs"),
+        ("d", "toggle_devices", "Toggle Devices"),
     ]
 
     def __init__(
@@ -145,12 +162,15 @@ class TailscaleManagerApp(TextualAppBase):
         self.app_config = config
         self.initial_keys = keys
         self.initial_last_apply = last_apply
+        self.devices_visible = True
 
     def compose(self) -> ComposeResult:
         yield Header()
         with Horizontal():
             with Vertical(classes="left-panel"):
                 yield DataTable(id="keys-table")
+            with Vertical(classes="center-panel", id="devices-panel"):
+                yield DataTable(id="devices-table")
             with Vertical(classes="right-panel"):
                 yield SystemStatus(self.app_config, self.initial_last_apply)
         yield Footer()
@@ -158,6 +178,7 @@ class TailscaleManagerApp(TextualAppBase):
     def on_mount(self) -> None:
         self.title = f"Tailscale Manager — {self.app_config.tailnet}"
         self._populate_table(self.initial_keys)
+        self._populate_devices()
         self.set_interval(30, self.action_refresh)
 
     def _populate_table(self, keys: list[TailscaleAuthKey]) -> None:
@@ -178,12 +199,40 @@ class TailscaleManagerApp(TextualAppBase):
         if not keys:
             table.add_row("(no keys managed)", "", "", "", "")
 
+    def _populate_devices(self) -> None:
+        table = self.query_one("#devices-table", DataTable)
+        table.clear(columns=True)
+        table.add_columns("Name", "Hostname", "Addresses", "Tags", "User")
+        repo = StateRepository(self.app_config.state_dir)
+        devices = repo.get_devices()
+        for d in devices:
+            addrs = ", ".join(d.addresses[:3]) if d.addresses else "-"
+            tags = ", ".join(d.tags[:3]) if d.tags else "-"
+            table.add_row(
+                d.name or "-",
+                d.hostname or "-",
+                addrs,
+                tags,
+                d.user or "-",
+            )
+        if not devices:
+            table.add_row("(run apply to discover devices)", "", "", "", "")
+
     def action_refresh(self) -> None:
         repo = StateRepository(self.app_config.state_dir)
         keys = repo.get_managed_keys()
         self._populate_table(keys)
+        self._populate_devices()
         sys_panel = self.query_one(SystemStatus)
         sys_panel.refresh_content()
 
     def action_view_logs(self) -> None:
         self.push_screen(LogViewer())
+
+    def action_toggle_devices(self) -> None:
+        panel = self.query_one("#devices-panel", Vertical)
+        self.devices_visible = not self.devices_visible
+        if self.devices_visible:
+            panel.remove_class("hidden")
+        else:
+            panel.add_class("hidden")

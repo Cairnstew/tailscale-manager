@@ -27,11 +27,28 @@ def _main() -> None:
     pass
 
 
+def _print_scope_warnings(config: AppConfig) -> None:
+    """Print non-blocking warnings about required OAuth scopes."""
+    warnings: list[str] = []
+    if config.dns_nameservers or config.dns_magic_dns or config.dns_split_nameservers:
+        warnings.append("  ⚠ DNS management configured — OAuth scope 'dns:write' may be required")
+    if config.tailnet_settings is not None:
+        warnings.append("  ⚠ Tailnet settings configured — OAuth scope 'tailnet:settings' may be required")
+    if config.acl_enable:
+        warnings.append("  ⚠ ACL management configured — OAuth scope 'tailnet:acls' may be required")
+    if warnings:
+        print("Preflight:")
+        for w in warnings:
+            print(w)
+        print()
+
+
 @app.command()
 def init() -> None:
     config = _load_config()
     svc = TerraformService(config)
-    svc.generate_config()
+    svc.write_configs()
+    _print_scope_warnings(config)
     output = svc.init()
     print(output)
 
@@ -40,7 +57,7 @@ def init() -> None:
 def plan() -> None:
     config = _load_config()
     svc = TerraformService(config)
-    svc.generate_config()
+    svc.write_configs()
     svc.init()
     output = svc.plan()
     print(output)
@@ -136,6 +153,54 @@ def status(
         pass
     except Exception as exc:
         print(f"TUI unavailable: {exc}", file=sys.stderr)
+
+
+@app.command()
+def devices(
+    json_output: bool = typer.Option(
+        False,
+        "--json",
+        help="Print devices as JSON array",
+    ),
+) -> None:
+    """List discovered Tailscale devices from Terraform state."""
+    config = _load_config()
+    repo = StateRepository(config.state_dir)
+    devices = repo.get_devices()
+
+    if json_output:
+        print(json.dumps(
+            [
+                {
+                    "id": d.id,
+                    "hostname": d.hostname,
+                    "name": d.name,
+                    "addresses": d.addresses,
+                    "tags": d.tags,
+                    "user": d.user,
+                }
+                for d in devices
+            ],
+            indent=2,
+            default=str,
+        ))
+        return
+
+    if not devices:
+        print("No devices discovered. Run 'tailscale-manager apply' first.")
+        return
+
+    print(f"Discovered {len(devices)} device(s):")
+    print()
+    for d in devices:
+        print(f"  {d.hostname or d.name}")
+        print(f"    ID:        {d.id}")
+        addrs = ", ".join(d.addresses) if d.addresses else "-"
+        print(f"    Addresses: {addrs}")
+        tags = ", ".join(d.tags) if d.tags else "-"
+        print(f"    Tags:      {tags}")
+        print(f"    User:      {d.user or '-'}")
+        print()
 
 
 @app.command()

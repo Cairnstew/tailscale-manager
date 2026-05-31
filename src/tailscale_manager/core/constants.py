@@ -1,11 +1,16 @@
 from __future__ import annotations
 
 APP_NAME = "tailscale-manager"
-VERSION = "0.1.0"
+VERSION = "0.3.0"
 DEFAULT_STATE_DIR = "/var/lib/tailscale-manager"
 PROVIDER_VERSION = "~> 0.29"
 LAST_APPLY_FILE = "last-apply.json"
 BACKUP_DIR = "backups"
 TERRAFORM_DIR = ".terraform"
 MAIN_TF_FILE = "main.tf.json"
+KEYS_TF_FILE = "keys.tf.json"
+DATA_TF_FILE = "data.tf.json"
+DNS_TF_FILE = "dns.tf.json"
+SETTINGS_TF_FILE = "settings.tf.json"
+ACL_TF_FILE = "acl.tf.json"
 STATE_FILE = "terraform.tfstate"

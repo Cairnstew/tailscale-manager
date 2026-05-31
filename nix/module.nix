@@ -101,6 +101,122 @@ in
       default = "~> 0.29";
       description = "Tailscale Terraform provider version constraint.";
     };
+
+    dns = {
+      nameservers = lib.mkOption {
+        type = lib.types.listOf lib.types.str;
+        default = [ ];
+        description = "Global DNS nameserver IPs (e.g. [\"1.1.1.1\" \"8.8.8.8\"])";
+        example = [ "1.1.1.1" "8.8.8.8" ];
+      };
+
+      magicDns = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = "Enable MagicDNS for this tailnet";
+      };
+
+      splitNameservers = lib.mkOption {
+        type = lib.types.attrsOf (lib.types.listOf lib.types.str);
+        default = { };
+        description = ''
+          Split DNS mapping: domain → list of nameserver IPs.
+          Each key becomes a separate tailscale_dns_split_nameservers resource.
+        '';
+        example = {
+          "corp.example.com" = [ "10.0.0.53" ];
+        };
+      };
+    };
+
+    acl = {
+      enable = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = ''
+          Enable ACL management. WARNING: applying overwrites the entire tailnet
+          policy. Current policy is backed up before every apply and restored on
+          failure.
+        '';
+      };
+
+      format = lib.mkOption {
+        type = lib.types.enum [ "hujson" "json" ];
+        default = "hujson";
+        description = "Policy file format. hujson is native Tailscale; json is standard JSON.";
+      };
+
+      policy = lib.mkOption {
+        type = lib.types.str;
+        default = "";
+        description = "Full ACL policy string (HuJSON or JSON). Must be valid for the chosen format.";
+        example = ''
+          {
+            "acls": [{ "action": "accept", "src": ["autogroup:member"], "dst": ["autogroup:member:*"] }]
+          }
+        '';
+      };
+    };
+
+    tailnetSettings = lib.mkOption {
+      type = lib.types.nullOr (lib.types.submodule {
+        freeformType = lib.types.attrs;
+        options = {
+          devicesApprovalOn = lib.mkOption {
+            type = lib.types.bool;
+            default = false;
+            description = "Require approval for new devices";
+          };
+          devicesAutoUpdatesOn = lib.mkOption {
+            type = lib.types.bool;
+            default = false;
+            description = "Enable automatic client updates";
+          };
+          devicesKeyDurationDays = lib.mkOption {
+            type = lib.types.nullOr lib.types.int;
+            default = null;
+            description = "Auth key expiry in days. null = no limit";
+          };
+          usersApprovalOn = lib.mkOption {
+            type = lib.types.bool;
+            default = false;
+            description = "Require approval for new users";
+          };
+          aclsExternallyManagedOn = lib.mkOption {
+            type = lib.types.bool;
+            default = false;
+            description = "Mark ACLs as externally managed";
+          };
+          aclsExternalLink = lib.mkOption {
+            type = lib.types.nullOr lib.types.str;
+            default = null;
+            description = "URL to external ACL documentation";
+          };
+          postureIdentityCollectionOn = lib.mkOption {
+            type = lib.types.bool;
+            default = false;
+            description = "Enable posture identity collection";
+          };
+          httpsEnabled = lib.mkOption {
+            type = lib.types.bool;
+            default = false;
+            description = "Enforce HTTPS for tailnet services";
+          };
+          regionalRoutingOn = lib.mkOption {
+            type = lib.types.bool;
+            default = false;
+            description = "Enable regional routing";
+          };
+          usersRoleAllowedToJoinExternalTailnet = lib.mkOption {
+            type = lib.types.nullOr lib.types.str;
+            default = null;
+            description = "User role allowed to join external tailnets";
+          };
+        };
+      });
+      default = null;
+      description = "Declarative tailnet-wide settings. Active when non-null.";
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -157,6 +273,10 @@ in
           "TAILSCALE_MANAGER_TAGS=${lib.concatStringsSep "," cfg.tags}"
           "TAILSCALE_MANAGER_RECREATE_IF_INVALID=${cfg.recreateIfInvalid}"
           "TAILSCALE_MANAGER_PROVIDER_VERSION=${cfg.providerVersion}"
+          "TAILSCALE_MANAGER_DNS_NAMESERVERS=${lib.concatStringsSep "," cfg.dns.nameservers}"
+          "TAILSCALE_MANAGER_DNS_MAGIC_DNS=${if cfg.dns.magicDns then "true" else "false"}"
+          "TAILSCALE_MANAGER_ACL_ENABLE=${if cfg.acl.enable then "true" else "false"}"
+          "TAILSCALE_MANAGER_ACL_FORMAT=${cfg.acl.format}"
         ];
         ExecStart = "${cfg.package}/bin/tailscale-manager apply";
         NoNewPrivileges = true;

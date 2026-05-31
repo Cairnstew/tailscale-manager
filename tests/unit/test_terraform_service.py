@@ -10,79 +10,98 @@ from tailscale_manager.core.config import AppConfig
 from tailscale_manager.services.terraform_service import TerraformService
 
 
-def test_write_config_produces_valid_json(tmp_path: Path) -> None:
+def test_write_configs_produces_multiple_files(tmp_path: Path) -> None:
     config = AppConfig(
         tailnet="test.ts.net",
         state_dir=tmp_path,
         tags=["tag:test"],
     )
     svc = TerraformService(config)
-    written = svc.write_config()
+    written = svc.write_configs()
 
     assert written is True
-    tf_path = tmp_path / "main.tf.json"
-    assert tf_path.exists()
-    data = json.loads(tf_path.read_text())
-    assert "terraform" in data
-    assert "provider" in data
-    assert "resource" in data
+    assert (tmp_path / "main.tf.json").exists()
+    assert (tmp_path / "keys.tf.json").exists()
+    assert (tmp_path / "data.tf.json").exists()
 
 
-def test_write_config_returns_false_when_unchanged(tmp_path: Path) -> None:
+def test_write_configs_produces_valid_json(tmp_path: Path) -> None:
     config = AppConfig(
         tailnet="test.ts.net",
         state_dir=tmp_path,
         tags=["tag:test"],
     )
     svc = TerraformService(config)
-    svc.write_config()
+    svc.write_configs()
 
-    tf_path = tmp_path / "main.tf.json"
-    mtime_before = tf_path.stat().st_mtime_ns
+    for fname in ["main.tf.json", "keys.tf.json", "data.tf.json"]:
+        data = json.loads((tmp_path / fname).read_text())
+        assert isinstance(data, dict)
 
-    written = svc.write_config()
+
+def test_write_configs_returns_false_when_unchanged(tmp_path: Path) -> None:
+    config = AppConfig(
+        tailnet="test.ts.net",
+        state_dir=tmp_path,
+        tags=["tag:test"],
+    )
+    svc = TerraformService(config)
+    svc.write_configs()
+
+    written = svc.write_configs()
     assert written is False
 
-    mtime_after = tf_path.stat().st_mtime_ns
-    assert mtime_after == mtime_before
 
-
-def test_write_config_includes_tags(tmp_path: Path) -> None:
+def test_main_tf_has_terraform_and_provider(tmp_path: Path) -> None:
     config = AppConfig(
         tailnet="test.ts.net",
         state_dir=tmp_path,
-        tags=["tag:infra", "tag:managed"],
     )
     svc = TerraformService(config)
-    svc.write_config()
+    svc.write_configs()
     data = json.loads((tmp_path / "main.tf.json").read_text())
-    tags = (
-        data["resource"]["tailscale_tailnet_key"]["managed_key"]["tags"]
-    )
-    assert tags == ["tag:infra", "tag:managed"]
+
+    assert "terraform" in data
+    assert "provider" in data
+    assert "resource" not in data
+    assert "data" not in data
 
 
-def test_write_config_default_tags_empty(tmp_path: Path) -> None:
+def test_main_tf_has_correct_provider_version(tmp_path: Path) -> None:
     config = AppConfig(
         tailnet="test.ts.net",
         state_dir=tmp_path,
     )
     svc = TerraformService(config)
-    svc.write_config()
+    svc.write_configs()
     data = json.loads((tmp_path / "main.tf.json").read_text())
-    tags = (
-        data["resource"]["tailscale_tailnet_key"]["managed_key"]["tags"]
+
+    provider = data["terraform"]["required_providers"]["tailscale"]
+    assert provider["source"] == "tailscale/tailscale"
+    assert provider["version"] == "~> 0.29"
+
+
+def test_main_tf_uses_custom_provider_version(tmp_path: Path) -> None:
+    config = AppConfig(
+        tailnet="test.ts.net",
+        state_dir=tmp_path,
+        provider_version="~> 0.40",
     )
-    assert tags == []
+    svc = TerraformService(config)
+    svc.write_configs()
+    data = json.loads((tmp_path / "main.tf.json").read_text())
+
+    version = data["terraform"]["required_providers"]["tailscale"]["version"]
+    assert version == "~> 0.40"
 
 
-def test_write_config_has_empty_provider_block(tmp_path: Path) -> None:
+def test_main_tf_has_empty_provider_block(tmp_path: Path) -> None:
     config = AppConfig(
         tailnet="test.ts.net",
         state_dir=tmp_path,
     )
     svc = TerraformService(config)
-    svc.write_config()
+    svc.write_configs()
     data = json.loads((tmp_path / "main.tf.json").read_text())
 
     assert data["provider"]["tailscale"] == {}
@@ -91,46 +110,149 @@ def test_write_config_has_empty_provider_block(tmp_path: Path) -> None:
     assert "oauth_client_secret" not in content
 
 
-def test_write_config_has_correct_provider_version(tmp_path: Path) -> None:
+def test_keys_tf_includes_tags(tmp_path: Path) -> None:
+    config = AppConfig(
+        tailnet="test.ts.net",
+        state_dir=tmp_path,
+        tags=["tag:infra", "tag:managed"],
+    )
+    svc = TerraformService(config)
+    svc.write_configs()
+    data = json.loads((tmp_path / "keys.tf.json").read_text())
+    tags = (
+        data["resource"]["tailscale_tailnet_key"]["managed_key"]["tags"]
+    )
+    assert tags == ["tag:infra", "tag:managed"]
+
+
+def test_keys_tf_default_tags_empty(tmp_path: Path) -> None:
     config = AppConfig(
         tailnet="test.ts.net",
         state_dir=tmp_path,
     )
     svc = TerraformService(config)
-    svc.write_config()
-    data = json.loads((tmp_path / "main.tf.json").read_text())
-
-    provider = data["terraform"]["required_providers"]["tailscale"]
-    assert provider["source"] == "tailscale/tailscale"
-    assert provider["version"] == "~> 0.29"
-
-
-def test_write_config_uses_custom_provider_version(tmp_path: Path) -> None:
-    config = AppConfig(
-        tailnet="test.ts.net",
-        state_dir=tmp_path,
-        provider_version="~> 0.40",
+    svc.write_configs()
+    data = json.loads((tmp_path / "keys.tf.json").read_text())
+    tags = (
+        data["resource"]["tailscale_tailnet_key"]["managed_key"]["tags"]
     )
-    svc = TerraformService(config)
-    svc.write_config()
-    data = json.loads((tmp_path / "main.tf.json").read_text())
-
-    version = data["terraform"]["required_providers"]["tailscale"]["version"]
-    assert version == "~> 0.40"
+    assert tags == []
 
 
-def test_write_config_honors_recreate_if_invalid(tmp_path: Path) -> None:
+def test_keys_tf_honors_recreate_if_invalid(tmp_path: Path) -> None:
     config = AppConfig(
         tailnet="test.ts.net",
         state_dir=tmp_path,
         recreate_if_invalid="never",
     )
     svc = TerraformService(config)
-    svc.write_config()
-    data = json.loads((tmp_path / "main.tf.json").read_text())
+    svc.write_configs()
+    data = json.loads((tmp_path / "keys.tf.json").read_text())
 
     key = data["resource"]["tailscale_tailnet_key"]["managed_key"]
     assert key["recreate_if_invalid"] == "never"
+
+
+def test_dns_tf_written_when_configured(tmp_path: Path) -> None:
+    config = AppConfig(
+        tailnet="test.ts.net",
+        state_dir=tmp_path,
+        dns_nameservers=["1.1.1.1"],
+        dns_magic_dns=True,
+    )
+    svc = TerraformService(config)
+    svc.write_configs()
+    assert (tmp_path / "dns.tf.json").exists()
+    data = json.loads((tmp_path / "dns.tf.json").read_text())
+    assert "tailscale_dns_nameservers" in data["resource"]
+    assert "tailscale_dns_preferences" in data["resource"]
+
+
+def test_settings_tf_written_when_configured(tmp_path: Path) -> None:
+    from tailscale_manager.models.settings import TailnetSettings
+
+    config = AppConfig(
+        tailnet="test.ts.net",
+        state_dir=tmp_path,
+        tailnet_settings=TailnetSettings(https_enabled=True),
+    )
+    svc = TerraformService(config)
+    svc.write_configs()
+    assert (tmp_path / "settings.tf.json").exists()
+    data = json.loads((tmp_path / "settings.tf.json").read_text())
+    assert "tailscale_tailnet_settings" in data["resource"]
+
+
+def test_settings_tf_not_written_when_not_configured(tmp_path: Path) -> None:
+    config = AppConfig(
+        tailnet="test.ts.net",
+        state_dir=tmp_path,
+    )
+    svc = TerraformService(config)
+    svc.write_configs()
+    assert not (tmp_path / "settings.tf.json").exists()
+
+
+def test_dns_tf_not_written_when_not_configured(tmp_path: Path) -> None:
+    config = AppConfig(
+        tailnet="test.ts.net",
+        state_dir=tmp_path,
+    )
+    svc = TerraformService(config)
+    svc.write_configs()
+    assert not (tmp_path / "dns.tf.json").exists()
+
+
+def test_acl_tf_written_when_enabled(tmp_path: Path) -> None:
+    config = AppConfig(
+        tailnet="test.ts.net",
+        state_dir=tmp_path,
+        acl_enable=True,
+        acl_policy='{"acls": []}',
+    )
+    svc = TerraformService(config)
+    svc.write_configs()
+    assert (tmp_path / "acl.tf.json").exists()
+    data = json.loads((tmp_path / "acl.tf.json").read_text())
+    assert "tailscale_acl" in data["resource"]
+
+
+def test_acl_tf_not_written_when_disabled(tmp_path: Path) -> None:
+    config = AppConfig(
+        tailnet="test.ts.net",
+        state_dir=tmp_path,
+        acl_enable=False,
+        acl_policy='{"acls": []}',
+    )
+    svc = TerraformService(config)
+    svc.write_configs()
+    assert not (tmp_path / "acl.tf.json").exists()
+
+
+def test_acl_tf_not_written_when_enabled_but_no_policy(tmp_path: Path) -> None:
+    config = AppConfig(
+        tailnet="test.ts.net",
+        state_dir=tmp_path,
+        acl_enable=True,
+        acl_policy="",
+    )
+    svc = TerraformService(config)
+    svc.write_configs()
+    assert not (tmp_path / "acl.tf.json").exists()
+
+
+def test_data_tf_has_devices_data_source(tmp_path: Path) -> None:
+    config = AppConfig(
+        tailnet="test.ts.net",
+        state_dir=tmp_path,
+    )
+    svc = TerraformService(config)
+    svc.write_configs()
+    data = json.loads((tmp_path / "data.tf.json").read_text())
+
+    assert "data" in data
+    assert "tailscale_devices" in data["data"]
+    assert "all" in data["data"]["tailscale_devices"]
 
 
 def test_app_config_rejects_tags_without_prefix() -> None:

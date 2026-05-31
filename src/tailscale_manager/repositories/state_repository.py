@@ -5,6 +5,7 @@ from datetime import datetime
 from pathlib import Path
 
 from tailscale_manager.models.auth_key import TailscaleAuthKey
+from tailscale_manager.models.device import TailscaleDevice
 
 
 class StateRepository:
@@ -44,6 +45,33 @@ class StateRepository:
                 )
                 keys.append(key)
         return keys
+
+    def get_devices(self) -> list[TailscaleDevice]:
+        state = self.read_state()
+        if state is None:
+            return []
+
+        devices: list[TailscaleDevice] = []
+        resources = state.get("resources", [])
+        for res in resources:
+            if res.get("type") != "tailscale_devices":
+                continue
+            if res.get("mode") != "data":
+                continue
+            for instance in res.get("instances", []):
+                attrs = instance.get("attributes", {})
+                raw_devices = attrs.get("devices", [])
+                for d in raw_devices:
+                    devices.append(TailscaleDevice(
+                        addresses=d.get("addresses", []),
+                        hostname=d.get("hostname", ""),
+                        id=d.get("id", ""),
+                        name=d.get("name", ""),
+                        node_id=d.get("node_id", ""),
+                        tags=d.get("tags", []),
+                        user=d.get("user", ""),
+                    ))
+        return devices
 
     def read_last_apply(self) -> dict | None:
         if not self.last_apply_file.exists():

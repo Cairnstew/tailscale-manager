@@ -8,11 +8,23 @@ from pathlib import Path
 from tailscale_manager.core.config import AppConfig
 from tailscale_manager.core.constants import (
     BACKUP_DIR,
+    KEYS_TF_FILE,
+    DATA_TF_FILE,
+    DNS_TF_FILE,
+    SETTINGS_TF_FILE,
+    ACL_TF_FILE,
     MAIN_TF_FILE,
     STATE_FILE,
 )
+from tailscale_manager.core.acl_backup import backup_acl, prune_acl_backups, restore_acl
 from tailscale_manager.core.exceptions import TerraformError
 from tailscale_manager.repositories.state_repository import StateRepository
+from tailscale_manager.services.features import (
+    build_acl_config,
+    build_devices_config,
+    build_dns_config,
+    build_settings_config,
+)
 from tailscale_manager.utils.subprocess_helpers import run_terraform
 
 
@@ -21,14 +33,13 @@ class TerraformService:
         self.config = config
         self.state_repo = StateRepository(config.state_dir)
 
-    def write_config(self) -> bool:
-        """Write main.tf.json. Returns True if written, False if unchanged."""
+    def write_configs(self) -> bool:
+        """Write all .tf.json files. Returns True if any file was written/changed."""
         self.config.state_dir.mkdir(parents=True, exist_ok=True)
-        tf_path = self.config.state_dir / MAIN_TF_FILE
 
         tags = self.config.tags
 
-        cfg = {
+        main_cfg = {
             "terraform": {
                 "required_providers": {
                     "tailscale": {
@@ -40,6 +51,9 @@ class TerraformService:
             "provider": {
                 "tailscale": {}
             },
+        }
+
+        keys_cfg = {
             "resource": {
                 "tailscale_tailnet_key": {
                     "managed_key": {
@@ -53,15 +67,50 @@ class TerraformService:
             },
         }
 
-        new_content = json.dumps(cfg, indent=2) + "\n"
+        data_cfg = build_devices_config()
 
-        if tf_path.exists():
-            existing = tf_path.read_text()
-            if existing == new_content:
-                return False
+        dns_cfg = build_dns_config(
+            nameservers=self.config.dns_nameservers,
+            magic_dns=self.config.dns_magic_dns,
+            split_nameservers=self.config.dns_split_nameservers,
+        )
 
-        tf_path.write_text(new_content)
-        return True
+        settings_cfg = build_settings_config(
+            settings=self.config.tailnet_settings,
+        )
+
+        acl_cfg = build_acl_config(
+            enable=self.config.acl_enable,
+            fmt=self.config.acl_format,
+            policy=self.config.acl_policy,
+        )
+
+        files: dict[str, dict] = {
+            MAIN_TF_FILE: main_cfg,
+            KEYS_TF_FILE: keys_cfg,
+            DATA_TF_FILE: data_cfg,
+        }
+
+        if dns_cfg:
+            files[DNS_TF_FILE] = dns_cfg
+
+        if settings_cfg:
+            files[SETTINGS_TF_FILE] = settings_cfg
+
+        if acl_cfg:
+            files[ACL_TF_FILE] = acl_cfg
+
+        written = False
+        for filename, cfg in files.items():
+            tf_path = self.config.state_dir / filename
+            new_content = json.dumps(cfg, indent=2) + "\n"
+            if tf_path.exists():
+                existing = tf_path.read_text()
+                if existing == new_content:
+                    continue
+            tf_path.write_text(new_content)
+            written = True
+        return written
 
     def init(self) -> str:
         return run_terraform(
@@ -82,7 +131,8 @@ class TerraformService:
         timestamp = datetime.now(timezone.utc).isoformat()
         try:
             self._backup_state()
-            self.write_config()
+            self._backup_acl()
+            self.write_configs()
             self.init()
             run_terraform(
                 self.config.terraform_bin,
@@ -100,6 +150,7 @@ class TerraformService:
             }
         except TerraformError as exc:
             self._restore_state()
+            self._restore_acl()
             result = {
                 "timestamp": timestamp,
                 "result": "error",
@@ -137,6 +188,45 @@ class TerraformService:
             }
         self.state_repo.write_last_apply(result)
         return result
+
+    def _backup_acl(self) -> None:
+        """Backup current ACL policy if ACL management is enabled."""
+        if not self.config.acl_enable or not self.config.acl_policy:
+            return
+        backup_dir = self.config.state_dir / BACKUP_DIR
+        self._fetch_and_backup_acl(backup_dir)
+
+    def _fetch_and_backup_acl(self, backup_dir: Path) -> None:
+        """Fetch current ACL from Tailscale API and write to backup file.
+        
+        This attempts to read the current ACL from the Terraform state (if it
+        was previously applied). If no state exists, it creates a backup marker
+        noting that no prior policy was found.
+        """
+        state = self.state_repo.read_state()
+        current_policy = ""
+        if state:
+            resources = state.get("resources", [])
+            for res in resources:
+                if res.get("type") != "tailscale_acl":
+                    continue
+                for instance in res.get("instances", []):
+                    attrs = instance.get("attributes", {})
+                    cached = attrs.get("acl", "")
+                    if cached:
+                        current_policy = cached
+                        break
+        if current_policy:
+            backup_acl(backup_dir, current_policy)
+
+    def _restore_acl(self) -> None:
+        """Restore ACL from the most recent backup if ACL management is enabled."""
+        if not self.config.acl_enable or not self.config.acl_policy:
+            return
+        backup_dir = self.config.state_dir / BACKUP_DIR
+        restored = restore_acl(backup_dir)
+        if restored is not None:
+            self.config.acl_policy = restored
 
     def _backup_state(self) -> None:
         state_file = self.config.state_dir / STATE_FILE

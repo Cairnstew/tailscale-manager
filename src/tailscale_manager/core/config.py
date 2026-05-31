@@ -6,6 +6,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
+from tailscale_manager.models.settings import TailnetSettings
+
 
 class AppConfig(BaseModel):
     tailnet: str = Field(
@@ -46,6 +48,50 @@ class AppConfig(BaseModel):
             "Tailscale Terraform provider version constraint. "
             "Set via TAILSCALE_MANAGER_PROVIDER_VERSION."
         ),
+    )
+
+    dns_nameservers: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Global DNS nameserver IPs. "
+            "Set via TAILSCALE_MANAGER_DNS_NAMESERVERS as comma-separated values: "
+            "e.g. TAILSCALE_MANAGER_DNS_NAMESERVERS='1.1.1.1,8.8.8.8'."
+        ),
+    )
+    dns_magic_dns: bool = Field(
+        default=False,
+        description=(
+            "Enable MagicDNS. "
+            "Set via TAILSCALE_MANAGER_DNS_MAGIC_DNS."
+        ),
+    )
+    dns_split_nameservers: dict[str, list[str]] = Field(
+        default_factory=dict,
+        description="Per-domain split DNS (domain → list of nameserver IPs). Configurable via NixOS only.",
+    )
+
+    tailnet_settings: TailnetSettings | None = Field(
+        default=None,
+        description="Declarative tailnet-wide settings. Configurable via NixOS only.",
+    )
+
+    acl_enable: bool = Field(
+        default=False,
+        description=(
+            "Enable ACL management. WARNING: applying overwrites the entire tailnet policy. "
+            "Set via TAILSCALE_MANAGER_ACL_ENABLE."
+        ),
+    )
+    acl_format: Literal["hujson", "json"] = Field(
+        default="hujson",
+        description=(
+            "Policy file format. hujson is native Tailscale; json is standard JSON. "
+            "Set via TAILSCALE_MANAGER_ACL_FORMAT."
+        ),
+    )
+    acl_policy: str = Field(
+        default="",
+        description="Full ACL policy string (HuJSON or JSON). Configurable via NixOS only.",
     )
 
     @field_validator("tags")
@@ -93,6 +139,21 @@ class AppConfig(BaseModel):
             "TAILSCALE_MANAGER_PROVIDER_VERSION", "~> 0.29"
         )
 
+        dns_nameservers_raw = os.environ.get("TAILSCALE_MANAGER_DNS_NAMESERVERS", "")
+        dns_nameservers = [s.strip() for s in dns_nameservers_raw.split(",") if s.strip()]
+
+        dns_magic_dns = os.environ.get(
+            "TAILSCALE_MANAGER_DNS_MAGIC_DNS", "false"
+        ).lower() in ("true", "1", "yes")
+
+        acl_enable = os.environ.get(
+            "TAILSCALE_MANAGER_ACL_ENABLE", "false"
+        ).lower() in ("true", "1", "yes")
+
+        acl_format = os.environ.get(
+            "TAILSCALE_MANAGER_ACL_FORMAT", "hujson"
+        )
+
         return cls(
             tailnet=tailnet,
             state_dir=state_dir,
@@ -101,6 +162,10 @@ class AppConfig(BaseModel):
             tags=tags,
             recreate_if_invalid=recreate_if_invalid,
             provider_version=provider_version,
+            dns_nameservers=dns_nameservers,
+            dns_magic_dns=dns_magic_dns,
+            acl_enable=acl_enable,
+            acl_format=acl_format,
         )
 
 

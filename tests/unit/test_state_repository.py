@@ -78,6 +78,93 @@ def test_get_managed_keys_skips_other_resource_types(tmp_path: Path) -> None:
     assert keys == []
 
 
+def test_get_devices_empty_when_no_state(tmp_path: Path) -> None:
+    repo = StateRepository(tmp_path)
+    devices = repo.get_devices()
+    assert devices == []
+
+
+def test_get_devices_parses_instances(tmp_path: Path) -> None:
+    state_file = tmp_path / "terraform.tfstate"
+    state_file.write_text("""
+    {
+      "version": 1,
+      "resources": [
+        {
+          "type": "tailscale_devices",
+          "mode": "data",
+          "instances": [
+            {
+              "attributes": {
+                "devices": [
+                  {
+                    "addresses": ["100.1.2.3"],
+                    "hostname": "node1",
+                    "id": "d1",
+                    "name": "node1.ts.net",
+                    "node_id": "n1",
+                    "tags": ["tag:server"],
+                    "user": "admin@example.com"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+    """)
+    repo = StateRepository(tmp_path)
+    devices = repo.get_devices()
+    assert len(devices) == 1
+    assert devices[0].id == "d1"
+    assert devices[0].hostname == "node1"
+    assert devices[0].addresses == ["100.1.2.3"]
+    assert devices[0].tags == ["tag:server"]
+    assert devices[0].user == "admin@example.com"
+
+
+def test_get_devices_skips_non_device_resources(tmp_path: Path) -> None:
+    state_file = tmp_path / "terraform.tfstate"
+    state_file.write_text("""
+    {
+      "version": 1,
+      "resources": [
+        {
+          "type": "tailscale_device",
+          "instances": [{"attributes": {"id": "d1"}}]
+        },
+        {
+          "type": "tailscale_tailnet_key",
+          "instances": [{"attributes": {"id": "k1"}}]
+        }
+      ]
+    }
+    """)
+    repo = StateRepository(tmp_path)
+    devices = repo.get_devices()
+    assert devices == []
+
+
+def test_get_devices_skips_non_data_resource(tmp_path: Path) -> None:
+    """A resource (not data source) of type tailscale_devices should be skipped."""
+    state_file = tmp_path / "terraform.tfstate"
+    state_file.write_text("""
+    {
+      "version": 1,
+      "resources": [
+        {
+          "type": "tailscale_devices",
+          "instances": [{"attributes": {"devices": []}}]
+        }
+      ]
+    }
+    """)
+    repo = StateRepository(tmp_path)
+    devices = repo.get_devices()
+    assert devices == []
+
+
 def test_read_last_apply_returns_none_when_no_file(tmp_path: Path) -> None:
     repo = StateRepository(tmp_path)
     assert repo.read_last_apply() is None
