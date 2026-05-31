@@ -18,7 +18,7 @@ subnet routes, exit nodes, and app connectors.
       "10.0.0.0/16":    ["tag:core-router"]
     },
     "exitNode": ["tag:exit-gateway"],
-    "appConnector": ["tag:app-connector-manager"]
+    "appConnectors": ["tag:app-connector-manager"]
   }
 }
 
@@ -37,9 +37,10 @@ Map of CIDR ranges to arrays of authorized approvers.
 
 Array of authorized approvers for exit node advertisements.
 
-### `appConnector`
+### `appConnectors`
 
 Array of authorized approvers for app connector advertisements.
+Note: the field name is `appConnectors` (plural), not `appConnector`.
 
 ## Rules
 
