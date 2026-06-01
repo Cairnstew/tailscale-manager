@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import subprocess
 
 from textual.app import App as TextualAppBase
@@ -75,12 +74,6 @@ class SystemStatus(Static):
         tf_icon = "[green]●[/green]" if state_file.exists() else "[red]●[/red]"
         tf_found = "found" if state_file.exists() else "not found"
         lines.append(f"Terraform state: {tf_icon} {tf_found}")
-
-        has_id = bool(os.environ.get("TAILSCALE_OAUTH_CLIENT_ID"))
-        has_secret = bool(os.environ.get("TAILSCALE_OAUTH_CLIENT_SECRET"))
-        creds_icon = "[green]●[/green]" if has_id and has_secret else "[red]●[/red]"
-        creds_status = "found" if has_id and has_secret else "not set"
-        lines.append(f"Credentials: {creds_icon} {creds_status}")
 
         backup_dir = self.config.state_dir / "backups"
         if backup_dir.exists():
