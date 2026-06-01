@@ -114,6 +114,15 @@ let
 
   # ── Serialization ────────────────────────────────────────────────
 
+  # Strip null / [] / {} from an entry's direct fields (non-recursive).
+  # Suitable for submodule entries where empty defaults carry no meaning.
+  # TagOwners and groups are NOT processed here — empty list values are
+  # semantically meaningful in those positions.
+  cleanEntry = entry:
+    if builtins.isAttrs entry
+    then lib.filterAttrs (name: value: value != null && value != [] && value != {}) entry
+    else entry;
+
   policyToJSON = policy:
     let
       withoutEnable = builtins.removeAttrs policy [ "enable" ];
@@ -126,16 +135,25 @@ let
       withCleanApprovers = withMergedAttrs // {
         autoApprovers = stripAutoApprovers withMergedAttrs.autoApprovers;
       };
+      # Clean submodule entries in lists where empty/null defaults would
+      # either be rejected by the API (e.g. "srcPosture": [] returns 400)
+      # or unnecessarily bloat the serialized policy.
+      withCleanLists = withCleanApprovers // {
+        grants    = map cleanEntry withCleanApprovers.grants;
+        ssh       = map cleanEntry withCleanApprovers.ssh;
+        acls      = map cleanEntry withCleanApprovers.acls;
+        tests     = map cleanEntry withCleanApprovers.tests;
+        sshTests  = map cleanEntry withCleanApprovers.sshTests;
+        nodeAttrs = map cleanEntry withCleanApprovers.nodeAttrs;
+      };
       # Top-level-only filter.  NOT recursive: we must not reach into
       # nested attrsets (tagOwners, groups, …) because empty-list
       # values are semantically meaningful there (e.g.
       #   "tag:server" = []
-      # means "admin-only tag").  Inside lists (grants, ssh, …) the
-      # submodule defaults are harmless — Tailscale ignores
-      # null / [] / {} in those positions.
+      # means "admin-only tag").
       cleaned = lib.filterAttrs
         (name: value: value != [] && value != {} && value != null)
-        withCleanApprovers;
+        withCleanLists;
     in builtins.toJSON cleaned;
 
   policyJSON =
@@ -843,7 +861,35 @@ in
       documentation = [ "https://github.com/user/tailscale-manager" ];
       wantedBy = [ "multi-user.target" ];
       partOf = [ "multi-user.target" ];
-      after = [ "network.target" ];
+      wants = [ "network-online.target" ];
+      after = [ "network-online.target" ];
+
+      path = [ pkgs.getent ];
+
+      # Use the environment attrset (not serviceConfig.Environment) so NixOS
+      # handles quoting automatically — essential for values containing spaces
+      # like providerVersion = "~> 0.29" which would otherwise be split by
+      # systemd's Environment= directive.
+      environment = {
+        GODEBUG = "netdns=go";
+        # Terraform writes its plugin cache to $HOME/.terraform.d/.
+        # ProtectHome=true remounts /root/ as read-only, so redirect HOME
+        # to the writable state directory.
+        HOME = "${cfg.stateDir}";
+        TAILSCALE_TAILNET = "${cfg.tailnet}";
+        TAILSCALE_MANAGER_STATE_DIR = "${cfg.stateDir}";
+        TAILSCALE_MANAGER_TERRAFORM_BIN = "${cfg.terraformBin}";
+        TAILSCALE_MANAGER_BACKUP_COUNT = "${toString cfg.backupCount}";
+        TAILSCALE_MANAGER_TAGS = "${lib.concatStringsSep "," cfg.tags}";
+        TAILSCALE_MANAGER_RECREATE_IF_INVALID = "${cfg.recreateIfInvalid}";
+        TAILSCALE_MANAGER_PROVIDER_VERSION = "${cfg.providerVersion}";
+        TAILSCALE_MANAGER_DNS_NAMESERVERS = "${lib.concatStringsSep "," cfg.dns.nameservers}";
+        TAILSCALE_MANAGER_DNS_MAGIC_DNS = "${if cfg.dns.magicDns then "true" else "false"}";
+        TAILSCALE_MANAGER_ACL_ENABLE = "${if cfg.acl.enable then "true" else "false"}";
+        TAILSCALE_MANAGER_ACL_FORMAT = "${cfg.acl.format}";
+      } // lib.optionalAttrs hasPolicyFile {
+        TAILSCALE_MANAGER_ACL_POLICY_PATH = "${cfg.stateDir}/policy.json";
+      };
 
       serviceConfig = {
         Type = "oneshot";
@@ -851,19 +897,6 @@ in
         StateDirectoryMode = "0700";
         WorkingDirectory = cfg.stateDir;
         LoadCredential = "tailscale-oauth:${cfg.credentialsFile}";
-        Environment = [
-          "TAILSCALE_TAILNET=${cfg.tailnet}"
-          "TAILSCALE_MANAGER_STATE_DIR=${cfg.stateDir}"
-          "TAILSCALE_MANAGER_TERRAFORM_BIN=${cfg.terraformBin}"
-          "TAILSCALE_MANAGER_BACKUP_COUNT=${toString cfg.backupCount}"
-          "TAILSCALE_MANAGER_TAGS=${lib.concatStringsSep "," cfg.tags}"
-          "TAILSCALE_MANAGER_RECREATE_IF_INVALID=${cfg.recreateIfInvalid}"
-          "TAILSCALE_MANAGER_PROVIDER_VERSION=${cfg.providerVersion}"
-          "TAILSCALE_MANAGER_DNS_NAMESERVERS=${lib.concatStringsSep "," cfg.dns.nameservers}"
-          "TAILSCALE_MANAGER_DNS_MAGIC_DNS=${if cfg.dns.magicDns then "true" else "false"}"
-          "TAILSCALE_MANAGER_ACL_ENABLE=${if cfg.acl.enable then "true" else "false"}"
-          "TAILSCALE_MANAGER_ACL_FORMAT=${cfg.acl.format}"
-        ] ++ lib.optional hasPolicyFile "TAILSCALE_MANAGER_ACL_POLICY_PATH=${cfg.stateDir}/policy.json";
         ExecStartPre = lib.mkIf hasPolicyFile (toString policyWriter);
         ExecStart = "${cfg.package}/bin/tailscale-manager apply";
         ReadWritePaths = [ cfg.stateDir ];

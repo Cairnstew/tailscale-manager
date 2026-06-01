@@ -20,3 +20,4 @@ To apply an example locally, copy the `policy.nix` block into your
 | Directory | Description |
 |---|---|
 | [`basic/`](./basic/) | Comprehensive demo — grants, SSH, tagOwners, hosts, ipsets, postures, nodeAttrs, autoApprovers |
+| [`ssh-nixos/`](./ssh-nixos/) | Tailscale SSH for NixOS servers — `tag:nixos`, access tiers, check vs accept |

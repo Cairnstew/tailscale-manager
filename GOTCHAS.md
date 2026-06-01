@@ -59,16 +59,23 @@ This is **not** a general recursive filter — only `autoApprovers` is
 stripped. `tagOwners` and `groups` are left alone because empty lists
 are semantically meaningful there.
 
-## Policy serialization: filterAttrs vs filterAttrsRecursive
+## Policy serialization: two-layer cleanup
 
-Use `lib.filterAttrs` (non-recursive) for the top-level policy cleanup,
-not `lib.filterAttrsRecursive`. The recursive variant descends into nested
-attrsets and removes empty lists, which drops semantically meaningful entries
-like `tagOwners."tag:server" = []` (a tag with no owners is valid and distinct
-from an unmanaged tag).
+The module uses a two-layer cleanup strategy for the serialized policy JSON:
 
-Rule: only strip null/empty at the top level. Never filter recursively into
-policy section values.
+**Layer 1 — submodule entries** (`cleanEntry`): inside `grants`, `ssh`, `acls`,
+`tests`, `sshTests`, and `nodeAttrs` lists, each entry's direct fields are
+cleaned by removing any key whose value is `null`, `[]`, or `{}`. This prevents
+the Tailscale API from rejecting fields like `"srcPosture": []` (returns 400)
+and removes serialization bloat from unset optional defaults.
+
+**Layer 2 — top-level** (`filterAttrs`): keys at the policy root are removed
+if their value is empty/null. This drops unused sections (`hosts`, `ipsets`,
+`postures`, etc.) that would otherwise appear as `{}` or `[]` in the JSON.
+
+Neither layer uses `filterAttrsRecursive` because it would descend into
+semantically meaningful empty lists inside `tagOwners` or `groups` —
+`tagOwners."tag:server" = []` means "admin-only tag" and must be preserved.
 
 ## App connectors: nodeAttrs.app and appConnectors are mutually exclusive
 
@@ -128,6 +135,39 @@ The service runs with `SystemCallFilter = "@system-service"`. If you
 see the service killed by seccomp (journal shows `SIGSYS`), the filter
 may need to be relaxed. This is rare — the standard syscall set covers
 Python, subprocess, and Terraform operations.
+
+### DNS resolution in sandboxed services
+
+The Go-based Terraform provider resolves HTTPS endpoints (Tailscale API,
+Terraform registry) at runtime. Under `ProtectSystem = "strict"` and
+`CapabilityBoundingSet = ""`, glibc's NSS-based DNS resolver can fail
+because it cannot access system databases (hosts, services) via `getent`.
+
+The module handles this automatically:
+
+- `GODEBUG=netdns=go` — forces Go to use its pure-Go DNS resolver
+  (direct queries, no NSS dependency).
+- `path = [ pkgs.getent ]` — ensures `getent` is available if Go falls
+  back to the system resolver.
+- `wants` / `after = [ "network-online.target" ]` — waits for actual
+  network connectivity, not just the network service starting.
+
+No manual workaround is needed.
+
+### Environment variables with spaces (providerVersion)
+
+The module uses NixOS's `environment` attrset (not `serviceConfig.Environment`)
+so values containing spaces — like `providerVersion = "~> 0.29"` — are
+automatically quoted by systemd's unit file generator. The `Environment=`
+directive in `serviceConfig` splits on whitespace, which would otherwise
+truncate `~> 0.29` to just `~>`.
+
+### ProtectHome and the Terraform plugin cache
+
+The service sets `ProtectHome = true`, which remounts `/root/` as an empty
+read-only tmpfs. The module overrides `HOME` to point at the writable state
+directory so Terraform can write its provider plugin cache to
+`$stateDir/.terraform.d/` instead.
 
 ### Terraform binary must be from the Nix store
 

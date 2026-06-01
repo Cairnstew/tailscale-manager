@@ -1,0 +1,38 @@
+{
+  "grants": [
+    {
+      "src": ["autogroup:member"],
+      "dst": ["tag:nixos"],
+      "ip":  ["tcp:22"]
+    },
+    {
+      "src": ["tag:nixos"],
+      "dst": ["tag:nixos"],
+      "ip":  ["tcp:22"]
+    }
+  ],
+  "ssh": [
+    {
+      "action": "accept",
+      "src":    ["autogroup:admin"],
+      "dst":    ["tag:nixos"],
+      "users":  ["autogroup:nonroot", "root"]
+    },
+    {
+      "action": "check",
+      "checkPeriod": "12h",
+      "src":    ["autogroup:member"],
+      "dst":    ["tag:nixos"],
+      "users":  ["autogroup:nonroot"]
+    },
+    {
+      "action": "accept",
+      "src":    ["tag:nixos"],
+      "dst":    ["tag:nixos"],
+      "users":  ["root"]
+    }
+  ],
+  "tagOwners": {
+    "tag:nixos": ["autogroup:admin"]
+  }
+}

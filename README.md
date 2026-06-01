@@ -625,6 +625,8 @@ src/tailscale_manager/
 
 For a full list of gotchas, see [`GOTCHAS.md`](./GOTCHAS.md).
 
+For the release process (version bump, tagging, publishing), see [`RELEASE.md`](./RELEASE.md).
+
 ---
 
 ## Reference documentation
