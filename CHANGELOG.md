@@ -4,6 +4,75 @@ All notable changes to this project will be documented in this file.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
+## [0.4.3] - 2026-06-01
+
+### Fixed
+
+- **Systemd environment quoting**: `serviceConfig.Environment` replaced with
+  NixOS `environment` attrset so `providerVersion` values containing spaces
+  (e.g. `"~> 0.29"`) are properly quoted instead of being split by systemd.
+- **ProtectHome / Terraform plugin cache**: `ProtectHome=true` remounts `/root/`
+  as read-only, preventing Terraform from writing its provider plugin cache.
+  The module now overrides `HOME` to the writable state directory.
+- **Policy serialization**: Empty submodule fields (`"srcPosture": []`,
+  `"via": []`) are now stripped from entries inside `grants`, `ssh`, `acls`
+  before JSON serialization. The Tailscale API rejects `"srcPosture": []`
+  with a 400 error.
+- **VERSION sync**: `constants.py` kept in sync with `pyproject.toml`.
+
+### Added
+
+- **Example**: `examples/ssh-nixos/` — SSH access tiers for `tag:nixos` servers
+  with admin `accept`, member `check`, and machine-to-machine rules.
+
+### Changed
+
+- **README**: `tailnet` default corrected from *required* to `"-"` in module
+  reference table; `TAILSCALE_TAILNET` env var no longer marked required;
+  `doctor` subcommand added to CLI reference and exit codes table;
+  Diagnostics section moved after CLI reference.
+
+## [0.4.2] - 2026-06-01
+
+### Added
+
+- **`tailscale-manager doctor`**: New pre-flight diagnostics subcommand.
+  Checks credentials source, OAuth client ID/secret, tailnet, terraform
+  binary/version, state directory, init status, state file/permissions,
+  last apply result, ACL policy, and DNS config. Supports `--check-api`
+  flag for OAuth connectivity test. Exits 0 on all pass, 1 on any failure.
+- **Structured error panels**: `ConfigurationError` and `TerraformError` now
+  render as rich `Panel` with sections (Field, Problem, Hint, Docs URL)
+  instead of raw tracebacks.
+- **First-run guidance**: `tailscale-manager init` prints a structured
+  4-step guide on first run. `tailscale-manager apply` exits early with
+  "not initialized" message if `.terraform/` is absent.
+- **Error pattern hints**: Known Terraform failure patterns (tag ownership,
+  OAuth credentials, permission denied, tailnet name, registry connectivity)
+  are matched against stderr and produce specific, actionable hints.
+- **assert_credentials()**: Separate method on `AppConfig` called explicitly
+  by `plan`, `apply`, `destroy` only — `init`, `status`, `devices`, `doctor`
+  no longer require OAuth credentials to be present at construction time.
+
+### Fixed
+
+- **TAILSCALE_TAILNET default**: No longer crashes with `ConfigurationError`
+  when unset. Defaults to `"-"` (auto-resolve from OAuth credential).
+- **Duplicate `ConfigurationError`**: Removed duplicate class definition from
+  `config.py` — consolidated into `core/exceptions.py`.
+- **CLI entry point**: Changed from `app` (Typer object) to `main()` wrapper
+  to catch and render exceptions at the top level.
+
+### Changed
+
+- **NixOS module**: `tailnet` option defaults to `"-"`. Added
+  `network-online.target` (waits for actual connectivity), `pkgs.getent`
+  (glibc NSS fallback), `GODEBUG=netdns=go` (Go built-in DNS resolver).
+  All previously manual workarounds are now baked in.
+- **`TerraformError` and `ConfigurationError`**: Extended from bare `Exception`
+  subclasses to `@dataclass` with structured fields (`message`, `field`,
+  `hint`, `command`, `exit_code`, `stdout`, `stderr`).
+
 ## [0.4.1] - 2026-06-01
 
 ### Fixed
