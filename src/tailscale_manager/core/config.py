@@ -6,8 +6,6 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from tailscale_manager.models.settings import TailnetSettings
-
 
 class AppConfig(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
@@ -70,11 +68,6 @@ class AppConfig(BaseModel):
     dns_split_nameservers: dict[str, list[str]] = Field(
         default_factory=dict,
         description="Per-domain split DNS (domain → list of nameserver IPs). Configurable via NixOS only.",
-    )
-
-    tailnet_settings: TailnetSettings | None = Field(
-        default=None,
-        description="Declarative tailnet-wide settings. Configurable via NixOS only.",
     )
 
     acl_enable: bool = Field(

@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
+## [0.3.2] - 2026-06-01
+
+### Removed
+
+- **`tailnetSettings` option**: Removed `services.tailscale-manager.tailnetSettings`
+  and all related Python/Terraform plumbing (`TailnetSettings` model,
+  `build_settings_config`, `settings.tf.json`). The Tailscale API exposes OAuth
+  client credentials to `GET/PATCH /api/v2/tailnet/-/settings`, which is a
+  security concern — tailnet-wide settings should be managed through the admin
+  console or a separate, more restricted workflow.
+
+### Changed
+
+- Terraform config now generates 5 files instead of 6 (`settings.tf.json` removed).
+
 ## [0.3.1] - 2026-05-31
 
 ### Added

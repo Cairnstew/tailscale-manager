@@ -32,8 +32,6 @@ def _print_scope_warnings(config: AppConfig) -> None:
     warnings: list[str] = []
     if config.dns_nameservers or config.dns_magic_dns or config.dns_split_nameservers:
         warnings.append("  ⚠ DNS management configured — OAuth scope 'dns:write' may be required")
-    if config.tailnet_settings is not None:
-        warnings.append("  ⚠ Tailnet settings configured — OAuth scope 'tailnet:settings' may be required")
     if config.acl_enable:
         warnings.append("  ⚠ ACL management configured — OAuth scope 'tailnet:acls' may be required")
     if warnings:

@@ -301,66 +301,6 @@ in
       };
     };
 
-    tailnetSettings = lib.mkOption {
-      type = lib.types.nullOr (lib.types.submodule {
-        freeformType = lib.types.attrs;
-        options = {
-          devicesApprovalOn = lib.mkOption {
-            type = lib.types.bool;
-            default = false;
-            description = "Require approval for new devices";
-          };
-          devicesAutoUpdatesOn = lib.mkOption {
-            type = lib.types.bool;
-            default = false;
-            description = "Enable automatic client updates";
-          };
-          devicesKeyDurationDays = lib.mkOption {
-            type = lib.types.nullOr lib.types.int;
-            default = null;
-            description = "Auth key expiry in days. null = no limit";
-          };
-          usersApprovalOn = lib.mkOption {
-            type = lib.types.bool;
-            default = false;
-            description = "Require approval for new users";
-          };
-          aclsExternallyManagedOn = lib.mkOption {
-            type = lib.types.bool;
-            default = false;
-            description = "Mark ACLs as externally managed";
-          };
-          aclsExternalLink = lib.mkOption {
-            type = lib.types.nullOr lib.types.str;
-            default = null;
-            description = "URL to external ACL documentation";
-          };
-          postureIdentityCollectionOn = lib.mkOption {
-            type = lib.types.bool;
-            default = false;
-            description = "Enable posture identity collection";
-          };
-          httpsEnabled = lib.mkOption {
-            type = lib.types.bool;
-            default = false;
-            description = "Enforce HTTPS for tailnet services";
-          };
-          regionalRoutingOn = lib.mkOption {
-            type = lib.types.bool;
-            default = false;
-            description = "Enable regional routing";
-          };
-          usersRoleAllowedToJoinExternalTailnet = lib.mkOption {
-            type = lib.types.nullOr lib.types.str;
-            default = null;
-            description = "User role allowed to join external tailnets";
-          };
-        };
-      });
-      default = null;
-      description = "Declarative tailnet-wide settings. Active when non-null.";
-    };
-
     # ── Structured policy ──────────────────────────────────────────────
 
     policy = {

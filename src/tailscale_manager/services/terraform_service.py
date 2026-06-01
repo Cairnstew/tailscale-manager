@@ -11,7 +11,6 @@ from tailscale_manager.core.constants import (
     KEYS_TF_FILE,
     DATA_TF_FILE,
     DNS_TF_FILE,
-    SETTINGS_TF_FILE,
     ACL_TF_FILE,
     MAIN_TF_FILE,
     STATE_FILE,
@@ -23,7 +22,6 @@ from tailscale_manager.services.features import (
     build_acl_config,
     build_devices_config,
     build_dns_config,
-    build_settings_config,
 )
 from tailscale_manager.utils.subprocess_helpers import run_terraform
 
@@ -75,10 +73,6 @@ class TerraformService:
             split_nameservers=self.config.dns_split_nameservers,
         )
 
-        settings_cfg = build_settings_config(
-            settings=self.config.tailnet_settings,
-        )
-
         acl_cfg = build_acl_config(
             enable=self.config.acl_enable,
             fmt=self.config.acl_format,
@@ -93,9 +87,6 @@ class TerraformService:
 
         if dns_cfg:
             files[DNS_TF_FILE] = dns_cfg
-
-        if settings_cfg:
-            files[SETTINGS_TF_FILE] = settings_cfg
 
         if acl_cfg:
             files[ACL_TF_FILE] = acl_cfg

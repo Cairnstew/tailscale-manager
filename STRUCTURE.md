@@ -37,15 +37,13 @@
 │   │   ├── models/
 │   │   │   ├── acl.py               #   AclConfig model
 │   │   │   ├── auth_key.py          #   TailscaleAuthKey dataclass
-│   │   │   ├── device.py            #   TailscaleDevice dataclass
-│   │   │   └── settings.py          #   TailnetSettings model
+│   │   │   └── device.py            #   TailscaleDevice dataclass
 │   │   ├── services/
 │   │   │   ├── features/            #   Feature config builders (per resource type)
 │   │   │   │   ├── __init__.py      #     Re-exports all builders
 │   │   │   │   ├── acl.py           #     tailscale_acl builder
 │   │   │   │   ├── devices.py       #     data.tailscale_devices builder
-│   │   │   │   ├── dns.py           #     tailscale_dns_* builders
-│   │   │   │   └── settings.py      #     tailscale_tailnet_settings builder
+│   │   │   │   └── dns.py           #     tailscale_dns_* builders
 │   │   │   └── terraform_service.py #   Orchestrator: calls feature builders,
 │   │   │                            #   writes multi-file .tf.json, runs terraform
 │   │   ├── repositories/

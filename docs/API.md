@@ -204,7 +204,6 @@ provider handles retries and backoff automatically.
 | `tailscale_dns_nameservers` | `GET/POST /dns/nameservers` | Global DNS |
 | `tailscale_dns_preferences` | `GET/POST /dns/preferences` | MagicDNS |
 | `tailscale_dns_split_nameservers` | `GET/PATCH /dns/split-dns` | Split DNS |
-| `tailscale_tailnet_settings` | `GET/PATCH /settings` | Tailnet settings |
 | `tailscale_acl` | `GET/POST /acl` | ACL policy |
 
 ---

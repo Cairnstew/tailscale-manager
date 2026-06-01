@@ -40,8 +40,6 @@ Managed keys: 1
   are replaced automatically on the next apply. No cron, no expiry tracking.
 - **DNS management** — declarative nameservers, MagicDNS, and per-domain split
   DNS via `dns.nameservers`, `dns.magicDns`, `dns.splitNameservers`.
-- **Tailnet settings** — configure device approval, auto-updates, key duration,
-  HTTPS enforcement, and more via `tailnetSettings`.
 - **ACL management** — opt-in full tailnet policy management with automatic
   backup of the current policy before every apply and restore on failure.
   Structured Nix options for grants, ACLs, SSH, tag owners, groups, hosts,
@@ -167,7 +165,6 @@ All options under `services.tailscale-manager`.
 | `dns.nameservers` | `list of strings` | `[]` | Global DNS nameserver IPs |
 | `dns.magicDns` | `bool` | `false` | Enable MagicDNS |
 | `dns.splitNameservers` | `attrs of list of strings` | `{}` | Per-domain split DNS (domain → nameserver IPs) |
-| `tailnetSettings` | `null or submodule` | `null` | Declarative tailnet-wide settings (device approval, auto-updates, HTTPS, etc.) |
 | `acl.enable` | `bool` | `false` | Enable ACL management (opt-in; backs up current policy before apply) |
 | `acl.format` | `enum` | `"hujson"` | Policy format — `"hujson"` or `"json"` |
 | `acl.policy` | `string` | `""` | Full ACL policy string (HuJSON or JSON) |
@@ -182,7 +179,7 @@ Three units are created when enabled:
 2. Backs up current ACL policy if ACL management is enabled
 3. Prunes old backups to `backupCount`
 4. Generates `.tf.json` files (`main.tf.json`, `keys.tf.json`,
-   `data.tf.json`, `dns.tf.json`, `settings.tf.json`, `acl.tf.json`)
+   `data.tf.json`, `dns.tf.json`, `acl.tf.json`)
 5. Runs `terraform init`
 6. Runs `terraform apply -auto-approve`
 7. Writes result to `last-apply.json`

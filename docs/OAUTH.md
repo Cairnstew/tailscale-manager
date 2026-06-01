@@ -67,8 +67,6 @@ and their granularity are documented in the [trust credentials reference](https:
 | `dns` (or `dns:write`) | Read + write DNS settings | DNS nameservers, MagicDNS, split DNS |
 | `policy_file` | Read + write ACL policy | ACL management |
 | `devices:core` | Manage device tags/lifecycle | Tagged device operations |
-| `feature_settings` | Read + write tailnet settings | Tailnet settings management |
-| `logs:network` | Read network flow logs | `tailnet_settings.network_flow_logging_on` |
 
 ### Legacy scopes
 

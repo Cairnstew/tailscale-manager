@@ -168,31 +168,6 @@ def test_dns_tf_written_when_configured(tmp_path: Path) -> None:
     assert "tailscale_dns_preferences" in data["resource"]
 
 
-def test_settings_tf_written_when_configured(tmp_path: Path) -> None:
-    from tailscale_manager.models.settings import TailnetSettings
-
-    config = AppConfig(
-        tailnet="test.ts.net",
-        state_dir=tmp_path,
-        tailnet_settings=TailnetSettings(https_enabled=True),
-    )
-    svc = TerraformService(config)
-    svc.write_configs()
-    assert (tmp_path / "settings.tf.json").exists()
-    data = json.loads((tmp_path / "settings.tf.json").read_text())
-    assert "tailscale_tailnet_settings" in data["resource"]
-
-
-def test_settings_tf_not_written_when_not_configured(tmp_path: Path) -> None:
-    config = AppConfig(
-        tailnet="test.ts.net",
-        state_dir=tmp_path,
-    )
-    svc = TerraformService(config)
-    svc.write_configs()
-    assert not (tmp_path / "settings.tf.json").exists()
-
-
 def test_dns_tf_not_written_when_not_configured(tmp_path: Path) -> None:
     config = AppConfig(
         tailnet="test.ts.net",
