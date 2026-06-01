@@ -53,25 +53,28 @@ class SystemStatus(Static):
         if self.last_apply:
             ts = self.last_apply.get("timestamp", "unknown")
             result = self.last_apply.get("result", "unknown")
-            icon = "✓" if result == "ok" else "✗"
+            is_ok = result == "ok"
+            icon = "[green]●[/green]" if is_ok else "[red]●[/red]"
             ts_str = str(ts)[:19] if not isinstance(ts, str) else ts[:19]
             lines.append(f"Last apply: {ts_str}")
             lines.append(f"  Result: {icon} {result}")
             err = self.last_apply.get("error_message")
             if err:
-                lines.append(f"  Error: {str(err)[:80]}")
+                lines.append(f"  [red]Error: {str(err)[:80]}[/red]")
         else:
-            lines.append("Last apply: never")
+            lines.append("Last apply: [yellow]never[/yellow]")
 
         lines.append("")
         state_file = self.config.state_dir / "terraform.tfstate"
+        tf_icon = "[green]●[/green]" if state_file.exists() else "[red]●[/red]"
         tf_found = "found" if state_file.exists() else "not found"
-        lines.append(f"Terraform state: {tf_found}")
+        lines.append(f"Terraform state: {tf_icon} {tf_found}")
 
         has_id = bool(os.environ.get("TAILSCALE_OAUTH_CLIENT_ID"))
         has_secret = bool(os.environ.get("TAILSCALE_OAUTH_CLIENT_SECRET"))
+        creds_icon = "[green]●[/green]" if has_id and has_secret else "[red]●[/red]"
         creds_status = "found" if has_id and has_secret else "not set"
-        lines.append(f"Credentials: {creds_status}")
+        lines.append(f"Credentials: {creds_icon} {creds_status}")
 
         backup_dir = self.config.state_dir / "backups"
         if backup_dir.exists():
@@ -85,8 +88,8 @@ class SystemStatus(Static):
         lines.append(f"Devices: {device_count} discovered")
 
         lines.append("")
-        lines.append(f"State dir: {self.config.state_dir}")
-        lines.append(f"Tailnet: {self.config.tailnet}")
+        lines.append(f"State dir: [dim]{self.config.state_dir}[/dim]")
+        lines.append(f"Tailnet: [dim]{self.config.tailnet}[/dim]")
         self.update("\n".join(lines))
 
 
@@ -117,31 +120,116 @@ class TailscaleManagerApp(TextualAppBase):
     CSS = """
     Screen {
         layout: horizontal;
+        background: #0a0e14;
+    }
+
+    Header {
+        background: #131a22;
+        color: #c8d6e5;
+        text-style: bold;
+    }
+
+    Footer {
+        background: #131a22;
+        color: #536277;
+    }
+
+    Footer > .footer--key {
+        color: #4dabf7;
+        text-style: bold;
+    }
+
+    Footer > .footer--description {
+        color: #8395a7;
     }
 
     .left-panel {
         width: 40%;
         height: 100%;
-        border: solid $primary;
+        border: solid rgba(40, 55, 75, 0.6);
+        background: rgba(15, 22, 30, 0.85);
         padding: 0 1;
+        margin: 0 0;
     }
 
     .center-panel {
         width: 35%;
         height: 100%;
-        border: solid $primary;
+        border: solid rgba(40, 55, 75, 0.6);
+        background: rgba(15, 22, 30, 0.85);
         padding: 0 1;
+        margin: 0 0;
     }
 
     .right-panel {
         width: 25%;
         height: 100%;
-        border: solid $primary;
+        border: solid rgba(40, 55, 75, 0.6);
+        background: rgba(15, 22, 30, 0.85);
         padding: 0 1;
+        margin: 0 0;
     }
 
     .hidden {
         display: none;
+    }
+
+    DataTable {
+        height: 100%;
+        background: transparent;
+        border: none;
+    }
+
+    DataTable > .datatable--header {
+        background: rgba(40, 55, 75, 0.4);
+        color: #4dabf7;
+        text-style: bold;
+    }
+
+    DataTable > .datatable--row {
+        background: transparent;
+        color: #c8d6e5;
+    }
+
+    DataTable > .datatable--row:hover {
+        background: rgba(77, 171, 247, 0.08);
+    }
+
+    DataTable > .datatable--cursor {
+        background: rgba(77, 171, 247, 0.12);
+    }
+
+    DataTable > .datatable--odd-row {
+        background: rgba(255, 255, 255, 0.02);
+    }
+
+    DataTable > .datatable--even-row {
+        background: transparent;
+    }
+
+    #keys-table {
+        height: 50%;
+        margin-bottom: 1;
+    }
+
+    #devices-table {
+        height: 100%;
+    }
+
+    SystemStatus {
+        padding: 1 1;
+        background: transparent;
+        color: #c8d6e5;
+    }
+
+    LogViewer Screen {
+        background: #0a0e14;
+    }
+
+    TextArea {
+        background: rgba(15, 22, 30, 0.85);
+        color: #c8d6e5;
+        border: solid rgba(40, 55, 75, 0.6);
     }
     """
 
@@ -186,7 +274,7 @@ class TailscaleManagerApp(TextualAppBase):
         table.clear(columns=True)
         table.add_columns("ID", "Description", "Tags", "Expiry", "Status")
         for k in keys:
-            status = "✓" if not k.revoked else "✗"
+            status = "[green]●[/green]" if not k.revoked else "[red]●[/red]"
             expiry = k.expiry.strftime("%Y-%m-%d") if k.expiry else "-"
             tags = ", ".join(k.tags) if k.tags else "-"
             table.add_row(
