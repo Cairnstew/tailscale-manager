@@ -26,6 +26,10 @@ check: lint typecheck test
 build:
     nix build .#default
 
+# Launch TUI dashboard
+tui:
+    nix develop . --command tailscale-manager status
+
 # Format
 fmt:
     nix develop .#bootstrap --command ruff format src/
