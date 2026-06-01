@@ -143,22 +143,21 @@ class TailscaleManagerApp(TextualAppBase):
         color: #8395a7;
     }
 
-    .left-panel {
-        width: 40%;
+    .left-column {
+        width: 75%;
         height: 100%;
+        layout: vertical;
         border: solid rgba(40, 55, 75, 0.6);
         background: rgba(15, 22, 30, 0.85);
         padding: 0 1;
-        margin: 0 0;
     }
 
-    .center-panel {
-        width: 35%;
-        height: 100%;
-        border: solid rgba(40, 55, 75, 0.6);
-        background: rgba(15, 22, 30, 0.85);
-        padding: 0 1;
-        margin: 0 0;
+    .left-column > .panel {
+        height: 50%;
+    }
+
+    #devices-section {
+        border-bottom: solid rgba(40, 55, 75, 0.3);
     }
 
     .right-panel {
@@ -208,8 +207,7 @@ class TailscaleManagerApp(TextualAppBase):
     }
 
     #keys-table {
-        height: 50%;
-        margin-bottom: 1;
+        height: 100%;
     }
 
     #devices-table {
@@ -255,10 +253,11 @@ class TailscaleManagerApp(TextualAppBase):
     def compose(self) -> ComposeResult:
         yield Header()
         with Horizontal():
-            with Vertical(classes="left-panel"):
-                yield DataTable(id="keys-table")
-            with Vertical(classes="center-panel", id="devices-panel"):
-                yield DataTable(id="devices-table")
+            with Vertical(classes="left-column", id="left-column"):
+                with Vertical(classes="panel", id="devices-section"):
+                    yield DataTable(id="devices-table")
+                with Vertical(classes="panel"):
+                    yield DataTable(id="keys-table")
             with Vertical(classes="right-panel"):
                 yield SystemStatus(self.app_config, self.initial_last_apply)
         yield Footer()
@@ -318,9 +317,9 @@ class TailscaleManagerApp(TextualAppBase):
         self.push_screen(LogViewer())
 
     def action_toggle_devices(self) -> None:
-        panel = self.query_one("#devices-panel", Vertical)
+        section = self.query_one("#devices-section", Vertical)
         self.devices_visible = not self.devices_visible
         if self.devices_visible:
-            panel.remove_class("hidden")
+            section.remove_class("hidden")
         else:
-            panel.add_class("hidden")
+            section.add_class("hidden")
