@@ -59,7 +59,7 @@ side for comparison.
 | `pyproject.toml` | Python project metadata, dependencies |
 | `uv.lock` | Lock file — drives the Nix overlay. **Must be regenerated after any pyproject.toml change.** |
 | `examples/` | Live-tested example configs with Nix + JSON side by side |
-| `src/tailscale_manager/` | Application package source |
+| `src/tailscale_manager/services/` | Core service orchestration (terraform, features, API client) |
 | `src/textual_ui/` | TUI package (Textual) — optional, add as dependency when needed |
 | `tests/` | Test suite |
 | `.github/workflows/ci.yml` | CI — lint, typecheck, test, build on push/PR |

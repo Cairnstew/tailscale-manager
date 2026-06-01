@@ -47,6 +47,8 @@
 │   │   │   │   └── keys.py          #     tailscale_tailnet_key builder
 │   │   │   └── terraform_service.py #   Orchestrator: calls feature builders,
 │   │   │                            #   writes multi-file .tf.json, runs terraform
+│   │   │   └── api_client.py        #   Direct Tailscale API client (OAuth token,
+│   │   │                            #   GET endpoints — read-only, used by TUI)
 │   │   ├── repositories/
 │   │   │   └── state_repository.py  #   Read/write tfstate, last-apply.json, devices
 │   │   ├── utils/

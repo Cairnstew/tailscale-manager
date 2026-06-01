@@ -206,6 +206,10 @@ provider handles retries and backoff automatically.
 | `tailscale_dns_split_nameservers` | `GET/PATCH /dns/split-dns` | Split DNS |
 | `tailscale_acl` | `GET/POST /acl` | ACL policy |
 
+The TUI also uses the Tailscale API directly (read-only) via `api_client.py`:
+`GET /api/v2/tailnet/{tailnet}/keys` — lists all auth keys on the tailnet, used
+instead of reading from Terraform state so the console and TUI stay in sync.
+
 ---
 
 ## Reference links
