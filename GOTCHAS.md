@@ -42,6 +42,23 @@ If `flake.nix` uses `pkgs.python3` but `pyproject.toml` says `requires-python = 
 ### Flake lock drift
 After changing flake inputs, run `nix flake lock` to update `flake.lock`. Otherwise you'll silently use the old pinned versions.
 
+## AutoApprovers: empty sub-fields leak into JSON
+
+`autoApprovers` is a submodule with `routes` (default `{}`), `exitNode`
+(default `[]`), and `appConnectors` (default `[]`). If you set only one
+sub-field, the others still appear as empty `{}`/`[]` in the serialized
+JSON. Tailscale's API may reject these empty values.
+
+The fix: `stripAutoApprovers` in `module.nix` removes any empty sub-field
+from `autoApprovers` before serialization. This is applied in addition to
+the top-level `filterAttrs` — note the difference: the top-level filter
+can't reach inside `autoApprovers` because the attrset as a whole is
+non-empty.
+
+This is **not** a general recursive filter — only `autoApprovers` is
+stripped. `tagOwners` and `groups` are left alone because empty lists
+are semantically meaningful there.
+
 ## Policy serialization: filterAttrs vs filterAttrsRecursive
 
 Use `lib.filterAttrs` (non-recursive) for the top-level policy cleanup,

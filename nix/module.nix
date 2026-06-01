@@ -101,6 +101,17 @@ let
     in
       nonAppEntries ++ synthesizedEntry;
 
+  # Strip empty sub-fields from autoApprovers (which is a submodule with
+  # all-optional fields).  Unlike tagOwners/groups, empty lists here have
+  # no semantic meaning and can cause Tailscale API rejection.
+  stripAutoApprovers = autoApprovers:
+    if builtins.isAttrs autoApprovers then
+      lib.filterAttrs
+        (name: value: value != [] && value != {} && value != null)
+        autoApprovers
+    else
+      autoApprovers;
+
   # ── Serialization ────────────────────────────────────────────────
 
   policyToJSON = policy:
@@ -111,6 +122,10 @@ let
       withoutAppConnectors = builtins.removeAttrs withoutEnable [ "appConnectors" ];
       mergedNodeAttrs = mergeNodeAttrs withoutAppConnectors.nodeAttrs appConnectorAttrs;
       withMergedAttrs = withoutAppConnectors // { nodeAttrs = mergedNodeAttrs; };
+      # Strip empty sub-fields from autoApprovers before top-level filter
+      withCleanApprovers = withMergedAttrs // {
+        autoApprovers = stripAutoApprovers withMergedAttrs.autoApprovers;
+      };
       # Top-level-only filter.  NOT recursive: we must not reach into
       # nested attrsets (tagOwners, groups, …) because empty-list
       # values are semantically meaningful there (e.g.
@@ -120,7 +135,7 @@ let
       # null / [] / {} in those positions.
       cleaned = lib.filterAttrs
         (name: value: value != [] && value != {} && value != null)
-        withMergedAttrs;
+        withCleanApprovers;
     in builtins.toJSON cleaned;
 
   policyJSON =

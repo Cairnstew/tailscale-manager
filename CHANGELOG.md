@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
+## [0.4.1] - 2026-06-01
+
+### Fixed
+
+- **NixOS module**: empty `autoApprovers` sub-fields (`exitNode`, `appConnectors`) no longer leak into the serialized JSON, which could cause Tailscale API rejection. A targeted `stripAutoApprovers` helper strips empty collections from `autoApprovers` only, preserving semantically meaningful empty lists in `tagOwners`/`groups`.
+
+### Added
+
+- **GOTCHAS.md**: documented the `autoApprovers` empty-field leak and its fix.
+
 ## [0.3.2] - 2026-06-01
 
 ### Added
