@@ -6,12 +6,18 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from tailscale_manager.core.exceptions import ConfigurationError
+
 
 class AppConfig(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     tailnet: str = Field(
-        description="Tailscale tailnet name (e.g. example.com)"
+        default="-",
+        description=(
+            "Tailscale tailnet name. Use '-' to auto-resolve from the OAuth credential. "
+            "This is the recommended default for most users."
+        ),
     )
     state_dir: Path = Field(
         default=Path("/var/lib/tailscale-manager"),
@@ -107,6 +113,13 @@ class AppConfig(BaseModel):
         description="Tailscale OAuth client secret. Loaded from LoadCredential file or TAILSCALE_OAUTH_CLIENT_SECRET.",
     )
 
+    @field_validator("tailnet")
+    @classmethod
+    def validate_tailnet(cls, v: str) -> str:
+        if v == "":
+            return "-"
+        return v
+
     @field_validator("tags")
     @classmethod
     def validate_tags(cls, v: list[str]) -> list[str]:
@@ -158,6 +171,37 @@ class AppConfig(BaseModel):
                 self.acl_policy = path.read_text()
         return self
 
+    def assert_credentials(self) -> None:
+        """Validate that all credential-requiring fields are present.
+
+        This is called explicitly by commands that need credentials (plan, apply, destroy),
+        NOT on construction, so that AppConfig can be instantiated in dev/CI, unit tests,
+        and the doctor command's partial-config path without requiring credentials.
+
+        Only the first error is raised; the doctor command is the right place to
+        enumerate all failures at once.
+        """
+        if not self.oauth_client_id:
+            raise ConfigurationError(
+                message="OAuth client ID is required but was not found",
+                field="TAILSCALE_OAUTH_CLIENT_ID",
+                hint=(
+                    "Set TAILSCALE_OAUTH_CLIENT_ID in your credentials file "
+                    "(NixOS: credentialsFile) or environment (dev: export "
+                    "TAILSCALE_OAUTH_CLIENT_ID=...)"
+                ),
+            )
+        if not self.oauth_client_secret:
+            raise ConfigurationError(
+                message="OAuth client secret is required but was not found",
+                field="TAILSCALE_OAUTH_CLIENT_SECRET",
+                hint=(
+                    "Set TAILSCALE_OAUTH_CLIENT_SECRET in your credentials file "
+                    "(NixOS: credentialsFile) or environment (dev: export "
+                    "TAILSCALE_OAUTH_CLIENT_SECRET=...)"
+                ),
+            )
+
     def terraform_env_extra(self) -> dict[str, str]:
         """Extra env vars needed by the Tailscale Terraform provider."""
         return {
@@ -167,13 +211,11 @@ class AppConfig(BaseModel):
 
     @classmethod
     def from_env(cls) -> AppConfig:
-        tailnet = os.environ.get("TAILSCALE_TAILNET")
+        tailnet = os.environ.get("TAILSCALE_TAILNET", "-")
         if not tailnet:
-            tailnet = os.environ.get("TAILSCALE_OAUTH_TAILNET", "")
+            tailnet = os.environ.get("TAILSCALE_OAUTH_TAILNET", "-")
         if not tailnet:
-            raise ConfigurationError(
-                "TAILSCALE_TAILNET environment variable is required"
-            )
+            tailnet = "-"
         state_dir = Path(
             os.environ.get(
                 "TAILSCALE_MANAGER_STATE_DIR",
@@ -232,7 +274,3 @@ class AppConfig(BaseModel):
             acl_format=acl_format,
             acl_policy_path=acl_policy_path,
         )
-
-
-class ConfigurationError(Exception):
-    pass

@@ -406,6 +406,29 @@ Key guarantees:
 
 ---
 
+## Diagnostics
+
+Run `tailscale-manager doctor` to check your configuration before applying:
+
+```
+$ tailscale-manager doctor
+
+Checking tailscale-manager configuration...
+
+  ✓  Credentials file         Found at /run/credentials/...
+  ✓  OAuth client ID          Set (tskey-client-...)
+  ✓  OAuth client secret      Set (••••••••)
+  ✓  Tailnet                  - (auto-resolve)
+  ✓  Terraform binary         /nix/store/.../bin/terraform (v1.9.x)
+  ✓  State directory          /var/lib/tailscale-manager (writable)
+  ✓  Terraform initialized    .terraform/ present
+  ✓  State file               terraform.tfstate present (permissions: 0600)
+
+Overall: All checks passed.
+```
+
+Add `--check-api` to also test OAuth connectivity to the Tailscale API.
+
 ## Key rotation strategy
 
 This project does **not** implement custom key rotation logic. Instead, it

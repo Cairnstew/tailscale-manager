@@ -192,6 +192,31 @@ Do NOT use `cdktf` or `cdktf-cdktf-provider-*` PyPI packages. This project uses
 subprocess + JSON-format HCL (Option A), which is simpler and doesn't depend on CDKTF's
 deprecated Python bindings.
 
+### Tailnet defaults to "-"
+
+If `TAILSCALE_TAILNET` is not set, it defaults to `"-"` which tells the
+Tailscale API to auto-resolve the tailnet from the OAuth credential. This
+is the recommended default for most users. You only need to set it explicitly
+if you manage multiple tailnets with the same OAuth client.
+
+### Pre-flight checks with `tailscale-manager doctor`
+
+Run `tailscale-manager doctor` before `apply` to verify your configuration.
+It checks credentials, terraform binary, state directory, initialization
+status, and last apply result. Add `--check-api` to also test OAuth
+connectivity to the Tailscale API.
+
+### OAuth scope error patterns
+
+Common Terraform errors and their fixes:
+
+| Error pattern | Fix |
+|---|---|
+| `does not own tag:` | Add tag ownership in admin console → Settings → OAuth → your client → Tag ownership |
+| `permission denied` | Verify OAuth scopes include the required permissions |
+| `no such tailnet` | Use `"-"` for tailnet to auto-resolve, or check the tailnet name |
+| `registry.terraform.io` | Check internet connectivity — provider download failed |
+
 ### Credentials via EnvironmentFile
 The NixOS module reads credentials from an EnvironmentFile (KEY=VAL format). Use agenix
 or sops-nix to encrypt this file. The module accepts any path via `credentialsFile`.

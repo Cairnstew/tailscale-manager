@@ -195,7 +195,11 @@ in
 
     tailnet = lib.mkOption {
       type = lib.types.str;
-      description = "Your Tailscale tailnet name, e.g. example.com";
+      default = "-";
+      description = ''
+        Your Tailscale tailnet name. Defaults to "-" which auto-resolves from the
+        OAuth credential. Recommended for most users.
+      '';
     };
 
     terraformBin = lib.mkOption {

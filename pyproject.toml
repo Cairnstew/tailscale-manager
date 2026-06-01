@@ -17,7 +17,7 @@ dependencies = [
 ]
 
 [project.scripts]
-tailscale-manager = "tailscale_manager.cli:app"
+tailscale-manager = "tailscale_manager.cli:main"
 
 [project.optional-dependencies]
 tui = ["textual>=0.60"]

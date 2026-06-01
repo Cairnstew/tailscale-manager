@@ -21,6 +21,28 @@ ALLOWED_ENV_KEYS = frozenset({
     "CREDENTIALS_DIRECTORY",
 })
 
+_KNOWN_ERROR_PATTERNS: list[tuple[str, str]] = [
+    ("does not own tag:", "The OAuth client does not own this tag — add it in the Tailscale admin console under Settings → OAuth → Tag ownership"),
+    ("oauth client", "Check your OAuth client ID and secret in credentialsFile"),
+    ("permission denied", "The OAuth client lacks the required scope — verify scopes in the admin console"),
+    ("no such tailnet", 'The tailnet name is incorrect — use "-" to auto-resolve'),
+    ("registry.terraform.io", "Network error reaching Terraform registry — check internet connectivity"),
+]
+
+_HINT_BY_COMMAND: dict[str, str] = {
+    "init": "Check network connectivity and terraform binary path",
+    "plan": "Check your Tailscale OAuth scopes and tailnet name",
+    "apply": "Check last-apply.json for details; run `tailscale-manager doctor`",
+    "destroy": "Ensure state file is present and uncorrupted",
+}
+
+
+def _find_hint(stderr: str, command: str) -> str | None:
+    for pattern, hint in _KNOWN_ERROR_PATTERNS:
+        if pattern.lower() in stderr.lower():
+            return hint
+    return _HINT_BY_COMMAND.get(command)
+
 
 def _build_terraform_env(extra: Mapping[str, str] | None = None) -> dict[str, str]:
     """Build a strict allowlist environment for terraform subprocess calls.
@@ -58,17 +80,29 @@ def run_terraform(
         if result.returncode != 0 and not (
             len(args) >= 1 and args[0] == "plan" and result.returncode == 2
         ):
-            msg = (
-                f"terraform {' '.join(args)} failed (exit {result.returncode}):\n"
-                f"{result.stderr.strip()}"
+            command = args[0] if args else "unknown"
+            raise TerraformError(
+                command=command,
+                exit_code=result.returncode,
+                stdout=result.stdout.strip(),
+                stderr=result.stderr.strip(),
+                hint=_find_hint(result.stderr, command),
             )
-            raise TerraformError(msg)
         return result.stdout.strip()
     except FileNotFoundError:
         raise TerraformError(
-            f"terraform binary not found at {terraform_bin}"
+            command=" ".join(args),
+            exit_code=-1,
+            stdout="",
+            stderr="",
+            hint=f"terraform binary not found at {terraform_bin} — ensure it is installed",
         )
     except subprocess.TimeoutExpired:
+        command = args[0] if args else "unknown"
         raise TerraformError(
-            f"terraform {' '.join(args)} timed out after {timeout}s"
+            command=command,
+            exit_code=-1,
+            stdout="",
+            stderr=f"timed out after {timeout}s",
+            hint="Increase timeout or check network connectivity",
         )
