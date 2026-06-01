@@ -22,6 +22,7 @@ from tailscale_manager.services.features import (
     build_acl_config,
     build_devices_config,
     build_dns_config,
+    build_keys_config,
 )
 from tailscale_manager.utils.subprocess_helpers import run_terraform
 
@@ -51,19 +52,10 @@ class TerraformService:
             },
         }
 
-        keys_cfg = {
-            "resource": {
-                "tailscale_tailnet_key": {
-                    "managed_key": {
-                        "reusable": True,
-                        "ephemeral": False,
-                        "preauthorized": True,
-                        "tags": tags,
-                        "recreate_if_invalid": self.config.recreate_if_invalid,
-                    }
-                }
-            },
-        }
+        keys_cfg = build_keys_config(
+            tags=tags,
+            recreate_if_invalid=self.config.recreate_if_invalid,
+        )
 
         data_cfg = build_devices_config()
 

@@ -206,12 +206,19 @@ class TailscaleManagerApp(TextualAppBase):
         background: transparent;
     }
 
-    #keys-table {
+    #auth-keys-table {
         height: 100%;
     }
 
     #devices-table {
         height: 100%;
+    }
+
+    .section-title {
+        text-style: bold;
+        color: #4dabf7;
+        padding: 0 0 0 1;
+        height: 1;
     }
 
     SystemStatus {
@@ -255,21 +262,23 @@ class TailscaleManagerApp(TextualAppBase):
         with Horizontal():
             with Vertical(classes="left-column", id="left-column"):
                 with Vertical(classes="panel", id="devices-section"):
+                    yield Static("Devices", classes="section-title")
                     yield DataTable(id="devices-table")
                 with Vertical(classes="panel"):
-                    yield DataTable(id="keys-table")
+                    yield Static("Auth Keys", classes="section-title")
+                    yield DataTable(id="auth-keys-table")
             with Vertical(classes="right-panel"):
                 yield SystemStatus(self.app_config, self.initial_last_apply)
         yield Footer()
 
     def on_mount(self) -> None:
         self.title = f"Tailscale Manager — {self.app_config.tailnet}"
-        self._populate_table(self.initial_keys)
+        self._populate_auth_keys(self.initial_keys)
         self._populate_devices()
         self.set_interval(30, self.action_refresh)
 
-    def _populate_table(self, keys: list[TailscaleAuthKey]) -> None:
-        table = self.query_one("#keys-table", DataTable)
+    def _populate_auth_keys(self, keys: list[TailscaleAuthKey]) -> None:
+        table = self.query_one("#auth-keys-table", DataTable)
         table.clear(columns=True)
         table.add_columns("ID", "Description", "Tags", "Expiry", "Status")
         for k in keys:
@@ -284,7 +293,7 @@ class TailscaleManagerApp(TextualAppBase):
                 status,
             )
         if not keys:
-            table.add_row("(no keys managed)", "", "", "", "")
+            table.add_row("(no auth keys managed)", "", "", "", "")
 
     def _populate_devices(self) -> None:
         table = self.query_one("#devices-table", DataTable)
@@ -308,7 +317,7 @@ class TailscaleManagerApp(TextualAppBase):
     def action_refresh(self) -> None:
         repo = StateRepository(self.app_config.state_dir)
         keys = repo.get_managed_keys()
-        self._populate_table(keys)
+        self._populate_auth_keys(keys)
         self._populate_devices()
         sys_panel = self.query_one(SystemStatus)
         sys_panel.refresh_content()

@@ -43,7 +43,8 @@
 │   │   │   │   ├── __init__.py      #     Re-exports all builders
 │   │   │   │   ├── acl.py           #     tailscale_acl builder
 │   │   │   │   ├── devices.py       #     data.tailscale_devices builder
-│   │   │   │   └── dns.py           #     tailscale_dns_* builders
+│   │   │   │   ├── dns.py           #     tailscale_dns_* builders
+│   │   │   │   └── keys.py          #     tailscale_tailnet_key builder
 │   │   │   └── terraform_service.py #   Orchestrator: calls feature builders,
 │   │   │                            #   writes multi-file .tf.json, runs terraform
 │   │   ├── repositories/
