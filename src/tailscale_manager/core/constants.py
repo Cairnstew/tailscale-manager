@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 APP_NAME = "tailscale-manager"
-VERSION = "0.3.0"
+VERSION = "0.4.0"
 DEFAULT_STATE_DIR = "/var/lib/tailscale-manager"
 PROVIDER_VERSION = "~> 0.29"
 LAST_APPLY_FILE = "last-apply.json"
