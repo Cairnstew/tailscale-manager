@@ -19,6 +19,24 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
   before JSON serialization. The Tailscale API rejects `"srcPosture": []`
   with a 400 error.
 - **VERSION sync**: `constants.py` kept in sync with `pyproject.toml`.
+- **Policy changes not triggering apply on rebuild**: The oneshot service now
+  has `restartIfChanged = true` (default for oneshot is `false`), so
+  `nixos-rebuild switch` runs the service whenever the policy content changes
+  (which alters the `ExecStartPre` store path hash, making the unit definition
+  differ).
+
+### Added
+
+- **Textual TUI bundled in Nix build**: `textual` added to the Nix virtualenv
+  via `workspace.deps.tui`, so `tailscale-manager status` launches the TUI
+  automatically.
+
+### Changed
+
+- **README**: `tailnet` default corrected from *required* to `"-"` in module
+  reference table; `TAILSCALE_TAILNET` env var no longer marked required;
+  `doctor` subcommand added to CLI reference and exit codes table;
+  Diagnostics section moved after CLI reference.
 
 ### Added
 
