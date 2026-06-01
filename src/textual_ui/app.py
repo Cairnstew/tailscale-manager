@@ -59,6 +59,11 @@ class SystemStatus(Static):
             ts_str = str(ts)[:19] if not isinstance(ts, str) else ts[:19]
             lines.append(f"Last apply: {ts_str}")
             lines.append(f"  Result: {icon} {result}")
+            if result == "ok":
+                add = self.last_apply.get("add_count", 0)
+                chg = self.last_apply.get("change_count", 0)
+                rem = self.last_apply.get("remove_count", 0)
+                lines.append(f"  Changes: +{add} ~{chg} -{rem}")
             err = self.last_apply.get("error_message")
             if err:
                 lines.append(f"  [red]Error: {str(err)[:80]}[/red]")
@@ -87,6 +92,9 @@ class SystemStatus(Static):
         repo = StateRepository(self.config.state_dir)
         device_count = len(repo.get_devices())
         lines.append(f"Devices: {device_count} discovered")
+
+        if not repo.check_state_file_permissions():
+            lines.append("[yellow]⚠ tfstate permissions wider than 0600[/yellow]")
 
         lines.append("")
         lines.append(f"State dir: [dim]{self.config.state_dir}[/dim]")
@@ -279,7 +287,10 @@ class TailscaleManagerApp(TextualAppBase):
 
     def _refresh_auth_keys(self) -> None:
         try:
-            keys = fetch_auth_keys()
+            keys = fetch_auth_keys(
+                client_id=self.app_config.oauth_client_id,
+                client_secret=self.app_config.oauth_client_secret,
+            )
         except Exception:
             repo = StateRepository(self.app_config.state_dir)
             keys = repo.get_managed_keys()

@@ -73,6 +73,13 @@ class StateRepository:
                     ))
         return devices
 
+    def check_state_file_permissions(self) -> bool:
+        """Return True if tfstate permissions are 0o600 or tighter, False if wider."""
+        if not self.state_file.exists():
+            return True
+        mode = self.state_file.stat().st_mode & 0o777
+        return mode == 0o600
+
     def read_last_apply(self) -> dict | None:
         if not self.last_apply_file.exists():
             return None

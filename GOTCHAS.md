@@ -84,6 +84,66 @@ declaratively via `services.tailscale-manager.policy`.
 
 ## Tailscale Manager
 
+### LoadCredential replaces EnvironmentFile (v0.4.0+)
+
+The NixOS module now uses systemd `LoadCredential` instead of
+`EnvironmentFile` for OAuth credential delivery. This prevents
+credentials from appearing in `/proc/<pid>/environ` or systemd
+journal logs. The credential file format is unchanged (KEY=VALUE).
+
+When running outside systemd (dev shells, CI), the CLI falls back to
+reading `TAILSCALE_OAUTH_CLIENT_ID` and `TAILSCALE_OAUTH_CLIENT_SECRET`
+from the environment directly.
+
+### State directory permissions
+
+The systemd service creates `stateDir` with mode `0700`. All files
+written by the service (`.tf.json`, `tfstate`, backups, policy.json)
+are created with mode `0600`. If you see a "permissions wider than
+0600" warning in `tailscale-manager status`, run:
+```
+chmod 0600 /var/lib/tailscale-manager/terraform.tfstate
+```
+
+### Sandboxing may block unusual syscalls
+
+The service runs with `SystemCallFilter = "@system-service"`. If you
+see the service killed by seccomp (journal shows `SIGSYS`), the filter
+may need to be relaxed. This is rare — the standard syscall set covers
+Python, subprocess, and Terraform operations.
+
+### Terraform binary must be from the Nix store
+
+The module asserts that `terraformBin` starts with `/nix/store`. This
+ensures binary integrity. Use `${pkgs.terraform}/bin/terraform` (the
+default) or another Nix-store path.
+
+### Subprocess environment is strictly limited
+
+The CLI runs terraform with a strict environment allowlist — only
+explicitly needed variables are passed to the subprocess. This prevents
+accidental credential leakage via environment inheritance. The allowlist
+includes `SSL_CERT_FILE` and `NIX_SSL_CERT_FILE` because the Terraform
+provider makes HTTPS calls to the Tailscale API and NixOS does not use
+FHS certificate paths.
+
+### Audit logging in last-apply.json
+
+After each apply, `last-apply.json` includes `actions` (per-resource
+create/update/delete), `add_count`, `change_count`, and `remove_count`.
+Old entries without these fields are handled gracefully — missing fields
+default to `null` or `0`.
+
+### Policy file content in Nix store
+
+The policy JSON is computed at Nix eval time and written to the Nix
+store as a derivation input. At service start, an `ExecStartPre` script
+copies it to `stateDir/policy.json` with mode `0600`. The store path
+is world-readable on the build machine — this approach protects against
+casual runtime enumeration but not against a determined local user who
+can read the Nix store. If the policy is genuinely sensitive, pass it
+as a secret via agenix/sops rather than computing it in Nix.
+
 ### terraform binary not in Python deps
 The `terraform` binary is NOT a Python dependency. It's provided by the NixOS module via
 `services.tailscale-manager.terraformBin` (default: `${pkgs.terraform}/bin/terraform`).

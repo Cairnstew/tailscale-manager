@@ -30,6 +30,12 @@ in
       description = ''
         Path to an EnvironmentFile containing TAILSCALE_OAUTH_CLIENT_ID and
         TAILSCALE_OAUTH_CLIENT_SECRET. If set, loads vars into the user session.
+
+        NOTE: LoadCredential is not available for Home Manager user services
+        (systemd --user scope). The home-module continues to use EnvironmentFile
+        for credential delivery. The Python AppConfig falls back to reading
+        TAILSCALE_OAUTH_CLIENT_ID/SECRET from the environment when
+        CREDENTIALS_DIRECTORY is not set.
       '';
     };
   };

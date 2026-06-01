@@ -238,12 +238,18 @@ Options: `enable`, `package`, `tailnet`, `credentialsFile`.
 > Run `tailscale-manager init` after configuration to see preflight warnings
 > about which scopes are needed.
 
-The credentials file must be an EnvironmentFile (KEY=VAL format) containing:
+Credentials are delivered to the service via systemd `LoadCredential`,
+which means they **never appear in the process environment** or systemd
+journal. The credentials file is KEY=VAL format:
 
 ```
 TAILSCALE_OAUTH_CLIENT_ID=<your-client-id>
 TAILSCALE_OAUTH_CLIENT_SECRET=<your-client-secret>
 ```
+
+When running outside systemd (dev shells, CI), the CLI falls back to
+reading `TAILSCALE_OAUTH_CLIENT_ID` and `TAILSCALE_OAUTH_CLIENT_SECRET`
+from the environment directly.
 
 ### With agenix
 
@@ -342,7 +348,14 @@ Written to `stateDir/last-apply.json` after every apply:
 ```json
 {
   "timestamp": "2026-05-31T00:00:00.000000+00:00",
-  "result": "ok"
+  "result": "ok",
+  "backup_path": "/var/lib/tailscale-manager/backups/20260531T000000000000.tfstate",
+  "actions": [
+    {"resource": "tailscale_tailnet_key.managed_key", "action": "create"}
+  ],
+  "add_count": 1,
+  "change_count": 0,
+  "remove_count": 0
 }
 ```
 
@@ -352,7 +365,11 @@ On failure:
 {
   "timestamp": "2026-05-31T00:00:00.000000+00:00",
   "result": "error",
-  "error_message": "terraform apply ... failed (exit 1):\nError creating tailnet key: ..."
+  "error_message": "terraform apply ... failed (exit 1):\nError creating tailnet key: ...",
+  "actions": [],
+  "add_count": 0,
+  "change_count": 0,
+  "remove_count": 0
 }
 ```
 

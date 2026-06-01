@@ -15,9 +15,11 @@ class TailscaleAPIError(Exception):
     pass
 
 
-def _get_oauth_token() -> str:
-    client_id = os.environ.get("TAILSCALE_OAUTH_CLIENT_ID", "")
-    client_secret = os.environ.get("TAILSCALE_OAUTH_CLIENT_SECRET", "")
+def _get_oauth_token(client_id: str = "", client_secret: str = "") -> str:
+    if not client_id:
+        client_id = os.environ.get("TAILSCALE_OAUTH_CLIENT_ID", "")
+    if not client_secret:
+        client_secret = os.environ.get("TAILSCALE_OAUTH_CLIENT_SECRET", "")
     if not client_id or not client_secret:
         raise TailscaleAPIError("TAILSCALE_OAUTH_CLIENT_ID and TAILSCALE_OAUTH_CLIENT_SECRET must be set")
 
@@ -37,8 +39,8 @@ def _get_oauth_token() -> str:
     return data["access_token"]
 
 
-def _api_get(path: str) -> Any:
-    token = _get_oauth_token()
+def _api_get(path: str, client_id: str = "", client_secret: str = "") -> Any:
+    token = _get_oauth_token(client_id, client_secret)
     req = urllib.request.Request(
         f"{API_BASE}{path}",
         headers={"Authorization": f"Bearer {token}"},
@@ -56,8 +58,8 @@ def _parse_ts(value: str | None) -> datetime | None:
         return None
 
 
-def fetch_auth_keys(tailnet: str = "-") -> list[TailscaleAuthKey]:
-    data = _api_get(f"/tailnet/{tailnet}/keys")
+def fetch_auth_keys(tailnet: str = "-", client_id: str = "", client_secret: str = "") -> list[TailscaleAuthKey]:
+    data = _api_get(f"/tailnet/{tailnet}/keys", client_id=client_id, client_secret=client_secret)
     keys: list[TailscaleAuthKey] = []
     for k in data.get("keys", []):
         if k.get("keyType") != "auth":

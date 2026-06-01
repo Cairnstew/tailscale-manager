@@ -134,6 +134,8 @@ def status(
     print()
     keys_file = config.state_dir / "terraform.tfstate"
     print(f"Terraform state: {'found' if keys_file.exists() else 'not found'}")
+    if not repo.check_state_file_permissions():
+        print("  ⚠ tfstate permissions wider than 0600 — run chmod 0600")
 
     print(f"Managed keys: {len(keys)}")
     for k in keys:

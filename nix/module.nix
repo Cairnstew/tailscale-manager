@@ -123,15 +123,18 @@ let
         withMergedAttrs;
     in builtins.toJSON cleaned;
 
-  policyFile =
-    if cfg.policy.enable then
-      pkgs.writeText "tailscale-policy.json" (policyToJSON cfg.policy)
-    else if cfg.acl.policy != "" then
-      pkgs.writeText "tailscale-policy.json" cfg.acl.policy
-    else
-      null;
+  policyJSON =
+    if cfg.policy.enable then policyToJSON cfg.policy
+    else if cfg.acl.policy != "" then cfg.acl.policy
+    else "";
 
-  hasPolicyFile = policyFile != null;
+  hasPolicyFile = policyJSON != "";
+
+  policyStore = pkgs.writeText "tailscale-policy.json" policyJSON;
+  policyWriter = pkgs.writeShellScript "write-tailscale-policy" ''
+    mkdir -p ${cfg.stateDir}
+    install -m 0600 ${policyStore} ${cfg.stateDir}/policy.json
+  '';
 
   # App connector duplicate name detection
   hasDuplicateConnectorNames =
@@ -720,7 +723,16 @@ in
 
   config = lib.mkIf cfg.enable {
     assertions =
-      lib.optionals (hasDuplicateConnectorNames && cfg.policy.enable) [{
+      [
+      {
+        assertion = lib.hasPrefix "/nix/store" (toString cfg.terraformBin);
+        message = ''
+          services.tailscale-manager.terraformBin must point to a path in the Nix
+          store (e.g. "${pkgs.terraform}/bin/terraform"). This ensures the binary's
+          integrity and reproducibility. Arbitrary paths are not permitted.
+        '';
+      }
+    ] ++ lib.optionals (hasDuplicateConnectorNames && cfg.policy.enable) [{
         assertion = false;
         message = ''
           services.tailscale-manager.policy.appConnectors: duplicate connector
@@ -817,8 +829,9 @@ in
       serviceConfig = {
         Type = "oneshot";
         StateDirectory = [ "tailscale-manager" ];
+        StateDirectoryMode = "0700";
         WorkingDirectory = cfg.stateDir;
-        EnvironmentFile = cfg.credentialsFile;
+        LoadCredential = "tailscale-oauth:${cfg.credentialsFile}";
         Environment = [
           "TAILSCALE_TAILNET=${cfg.tailnet}"
           "TAILSCALE_MANAGER_STATE_DIR=${cfg.stateDir}"
@@ -831,12 +844,25 @@ in
           "TAILSCALE_MANAGER_DNS_MAGIC_DNS=${if cfg.dns.magicDns then "true" else "false"}"
           "TAILSCALE_MANAGER_ACL_ENABLE=${if cfg.acl.enable then "true" else "false"}"
           "TAILSCALE_MANAGER_ACL_FORMAT=${cfg.acl.format}"
-        ] ++ lib.optional hasPolicyFile "TAILSCALE_MANAGER_ACL_POLICY_PATH=${policyFile}";
+        ] ++ lib.optional hasPolicyFile "TAILSCALE_MANAGER_ACL_POLICY_PATH=${cfg.stateDir}/policy.json";
+        ExecStartPre = lib.mkIf hasPolicyFile (toString policyWriter);
         ExecStart = "${cfg.package}/bin/tailscale-manager apply";
+        ReadWritePaths = [ cfg.stateDir ];
         NoNewPrivileges = true;
+        PrivateTmp = true;
+        PrivateMounts = true;
         ProtectSystem = "strict";
         ProtectHome = true;
-        PrivateTmp = true;
+        ProtectKernelTunables = true;
+        ProtectKernelModules = true;
+        ProtectControlGroups = true;
+        CapabilityBoundingSet = "";
+        MemoryDenyWriteExecute = true;
+        RestrictNamespaces = true;
+        LockPersonality = true;
+        RestrictSUIDSGID = true;
+        SystemCallFilter = "@system-service";
+        RemoveIPC = true;
       };
     };
 

@@ -25,6 +25,7 @@ def backup_acl(backup_dir: Path, policy: str) -> Path:
     ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%f")
     backup_path = backup_dir / f"{ACL_BACKUP_PREFIX}{ts}.hujson"
     backup_path.write_text(policy)
+    backup_path.chmod(0o600)
     return backup_path
 
 

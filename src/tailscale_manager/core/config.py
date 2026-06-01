@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -98,6 +98,15 @@ class AppConfig(BaseModel):
         ),
     )
 
+    oauth_client_id: str = Field(
+        default="",
+        description="Tailscale OAuth client ID. Loaded from LoadCredential file or TAILSCALE_OAUTH_CLIENT_ID.",
+    )
+    oauth_client_secret: str = Field(
+        default="",
+        description="Tailscale OAuth client secret. Loaded from LoadCredential file or TAILSCALE_OAUTH_CLIENT_SECRET.",
+    )
+
     @field_validator("tags")
     @classmethod
     def validate_tags(cls, v: list[str]) -> list[str]:
@@ -110,6 +119,37 @@ class AppConfig(BaseModel):
             )
         return v
 
+    @model_validator(mode="before")
+    @classmethod
+    def load_credentials(cls, data: Any) -> Any:
+        """Load OAuth credentials from LoadCredential file or environment.
+
+        Priority:
+        1. CREDENTIALS_DIRECTORY env var -> read $CREDENTIALS_DIRECTORY/tailscale-oauth
+        2. TAILSCALE_OAUTH_CLIENT_ID / TAILSCALE_OAUTH_CLIENT_SECRET env vars (backwards compat)
+        """
+        if not isinstance(data, dict):
+            return data
+        if data.get("oauth_client_id") and data.get("oauth_client_secret"):
+            return data
+        creds_dir = os.environ.get("CREDENTIALS_DIRECTORY", "")
+        if creds_dir:
+            cred_file = Path(creds_dir) / "tailscale-oauth"
+            if cred_file.exists():
+                creds: dict[str, str] = {}
+                for line in cred_file.read_text().splitlines():
+                    line = line.strip()
+                    if not line or line.startswith("#"):
+                        continue
+                    key, _, value = line.partition("=")
+                    creds[key.strip()] = value.strip()
+                data.setdefault("oauth_client_id", creds.get("TAILSCALE_OAUTH_CLIENT_ID", ""))
+                data.setdefault("oauth_client_secret", creds.get("TAILSCALE_OAUTH_CLIENT_SECRET", ""))
+                return data
+        data.setdefault("oauth_client_id", os.environ.get("TAILSCALE_OAUTH_CLIENT_ID", ""))
+        data.setdefault("oauth_client_secret", os.environ.get("TAILSCALE_OAUTH_CLIENT_SECRET", ""))
+        return data
+
     @model_validator(mode="after")
     def load_policy_file(self) -> AppConfig:
         if self.acl_policy_path is not None:
@@ -117,6 +157,13 @@ class AppConfig(BaseModel):
             if path.exists():
                 self.acl_policy = path.read_text()
         return self
+
+    def terraform_env_extra(self) -> dict[str, str]:
+        """Extra env vars needed by the Tailscale Terraform provider."""
+        return {
+            "TAILSCALE_OAUTH_CLIENT_ID": self.oauth_client_id,
+            "TAILSCALE_OAUTH_CLIENT_SECRET": self.oauth_client_secret,
+        }
 
     @classmethod
     def from_env(cls) -> AppConfig:

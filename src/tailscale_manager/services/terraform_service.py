@@ -24,7 +24,7 @@ from tailscale_manager.services.features import (
     build_dns_config,
     build_keys_config,
 )
-from tailscale_manager.utils.subprocess_helpers import run_terraform
+from tailscale_manager.utils.subprocess_helpers import _build_terraform_env, run_terraform
 
 
 class TerraformService:
@@ -32,8 +32,13 @@ class TerraformService:
         self.config = config
         self.state_repo = StateRepository(config.state_dir)
 
+    def _write_sensitive(self, path: Path, content: str) -> None:
+        """Write a file with restricted permissions (0o600)."""
+        path.write_text(content)
+        path.chmod(0o600)
+
     def write_configs(self) -> bool:
-        """Write all .tf.json files. Returns True if any file was written/changed."""
+        """Write all .tf.json files with restricted permissions. Returns True if any file was written/changed."""
         self.config.state_dir.mkdir(parents=True, exist_ok=True)
 
         tags = self.config.tags
@@ -91,7 +96,7 @@ class TerraformService:
                 existing = tf_path.read_text()
                 if existing == new_content:
                     continue
-            tf_path.write_text(new_content)
+            self._write_sensitive(tf_path, new_content)
             written = True
         return written
 
@@ -110,26 +115,78 @@ class TerraformService:
             timeout=60,
         )
 
+    @staticmethod
+    def _parse_terraform_json_output(output: str) -> dict:
+        """Parse terraform -json output for audit logging.
+
+        Returns dict with actions, add_count, change_count, remove_count.
+        """
+        actions: list[dict] = []
+        add_count = 0
+        change_count = 0
+        remove_count = 0
+
+        for line in output.strip().splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                event = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+
+            event_type = event.get("type", "")
+
+            if event_type == "change_summary":
+                changes = event.get("changes", {})
+                add_count = changes.get("add", 0)
+                change_count = changes.get("change", 0)
+                remove_count = changes.get("remove", 0)
+
+            elif event_type == "apply_complete":
+                hook = event.get("hook", {})
+                resource = hook.get("resource", {})
+                addr = resource.get("addr", "")
+                action = hook.get("action", "")
+                if addr and action:
+                    actions.append({"resource": addr, "action": action})
+
+        return {
+            "actions": actions,
+            "add_count": add_count,
+            "change_count": change_count,
+            "remove_count": remove_count,
+        }
+
     def apply(self) -> dict:
         timestamp = datetime.now(timezone.utc).isoformat()
+        env = self.config.terraform_env_extra()
         try:
-            self._backup_state()
+            backup_path = self._backup_state()
             self._backup_acl()
             self.write_configs()
             self.init()
-            run_terraform(
+            output = run_terraform(
                 self.config.terraform_bin,
                 [
                     "apply",
                     "-input=false",
                     "-auto-approve",
+                    "-json",
                 ],
                 cwd=self.config.state_dir,
+                env=_build_terraform_env(env) if env else None,
                 timeout=180,
             )
+            audit = self._parse_terraform_json_output(output)
             result = {
                 "timestamp": timestamp,
                 "result": "ok",
+                "backup_path": str(backup_path) if backup_path else None,
+                "actions": audit["actions"],
+                "add_count": audit["add_count"],
+                "change_count": audit["change_count"],
+                "remove_count": audit["remove_count"],
             }
         except TerraformError as exc:
             self._restore_state()
@@ -138,12 +195,18 @@ class TerraformService:
                 "timestamp": timestamp,
                 "result": "error",
                 "error_message": str(exc),
+                "backup_path": None,
+                "actions": [],
+                "add_count": 0,
+                "change_count": 0,
+                "remove_count": 0,
             }
         self.state_repo.write_last_apply(result)
         return result
 
     def destroy(self) -> dict:
         timestamp = datetime.now(timezone.utc).isoformat()
+        env = self.config.terraform_env_extra()
         try:
             self._backup_state()
             run_terraform(
@@ -154,12 +217,18 @@ class TerraformService:
                     "-auto-approve",
                 ],
                 cwd=self.config.state_dir,
+                env=_build_terraform_env(env) if env else None,
                 timeout=180,
             )
             result = {
                 "timestamp": timestamp,
                 "result": "ok",
                 "action": "destroy",
+                "backup_path": None,
+                "actions": [],
+                "add_count": 0,
+                "change_count": 0,
+                "remove_count": 0,
             }
         except TerraformError as exc:
             self._restore_state()
@@ -181,7 +250,7 @@ class TerraformService:
 
     def _fetch_and_backup_acl(self, backup_dir: Path) -> None:
         """Fetch current ACL from Tailscale API and write to backup file.
-        
+
         This attempts to read the current ACL from the Terraform state (if it
         was previously applied). If no state exists, it creates a backup marker
         noting that no prior policy was found.
@@ -211,16 +280,18 @@ class TerraformService:
         if restored is not None:
             self.config.acl_policy = restored
 
-    def _backup_state(self) -> None:
+    def _backup_state(self) -> Path | None:
         state_file = self.config.state_dir / STATE_FILE
         if not state_file.exists():
-            return
+            return None
         backup_dir = self.config.state_dir / BACKUP_DIR
         backup_dir.mkdir(parents=True, exist_ok=True)
         ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%f")
         backup_path = backup_dir / f"{ts}.tfstate"
         shutil.copy2(state_file, backup_path)
+        backup_path.chmod(0o600)
         self._prune_backups()
+        return backup_path
 
     def _restore_state(self) -> None:
         backup_dir = self.config.state_dir / BACKUP_DIR
@@ -232,6 +303,7 @@ class TerraformService:
         latest = backups[-1]
         state_file = self.config.state_dir / STATE_FILE
         shutil.copy2(latest, state_file)
+        state_file.chmod(0o600)
 
     def _prune_backups(self) -> None:
         backup_dir = self.config.state_dir / BACKUP_DIR
@@ -239,3 +311,4 @@ class TerraformService:
         while len(backups) > self.config.backup_count:
             backups[0].unlink()
             backups = backups[1:]
+
