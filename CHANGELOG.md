@@ -6,6 +6,33 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [0.3.2] - 2026-06-01
 
+### Added
+
+- **App connectors**: New `services.tailscale-manager.policy.appConnectors` option
+  for declarative app connector configuration. Synthesizes the correct
+  `nodeAttrs` entry with `tailscale.com/app-connectors` capability, with
+  assertions for duplicate names, mutual exclusion with manual `nodeAttrs.app`
+  entries, and missing `policy.enable`/`acl.enable`. Includes full Nix module
+  options, Python serialization tests, and documentation.
+- **Live auth keys in TUI**: TUI now fetches auth keys from the Tailscale API
+  (`/api/v2/tailnet/-/keys`) instead of parsing tfstate. Falls back to
+  tfstate on API error. New `src/tailscale_manager/services/api_client.py`
+  module for OAuth-authenticated API access.
+- **Example configurations**: `examples/basic/` with `policy.nix` + `policy.json`
+  side-by-side for all policy sections including app connectors.
+
+### Changed
+
+- **TUI visual overhaul**: Glass-morphism design with frosted panels,
+  dark color scheme (`#0a0e14`), colored status indicators (green/red/yellow
+  dots), dimmed secondary text, styled `DataTable` headers and rows.
+  Layout reorganized: devices above auth keys in the left column.
+- **TUI key column relabeled**: `Keys` → `Auth Keys` for clarity.
+- **Terraform config** now generates 5 files instead of 6 (`settings.tf.json`
+  removed).
+- **`autoApprovers.appConnector`** renamed to `autoApprovers.appConnectors` to
+  match the Tailscale API field name.
+
 ### Removed
 
 - **`tailnetSettings` option**: Removed `services.tailscale-manager.tailnetSettings`
@@ -15,9 +42,10 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
   security concern — tailnet-wide settings should be managed through the admin
   console or a separate, more restricted workflow.
 
-### Changed
+### Fixed
 
-- Terraform config now generates 5 files instead of 6 (`settings.tf.json` removed).
+- `ConfigDict(populate_by_name=True)` in Pydantic models so `validation_alias`
+  doesn't block Python field name access.
 
 ## [0.3.1] - 2026-05-31
 
