@@ -14,14 +14,11 @@ requires-python = ">=3.11"
 dependencies = [
     "typer>=0.12",
     "pydantic>=2.5",
+    "textual>=0.60",
 ]
 
 [project.scripts]
 tailscale-manager = "tailscale_manager.cli:main"
-
-[project.optional-dependencies]
-tui = ["textual>=0.60"]
-dev = []
 
 [build-system]
 requires = ["setuptools>=75.8"]
@@ -31,9 +28,6 @@ build-backend = "setuptools.build_meta"
 dev = [
     "pytest>=8",
     "pytest-cov>=5",
-]
-tui = [
-    "textual>=0.60",
 ]
 
 [tool.setuptools.packages.find]

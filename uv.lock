@@ -403,12 +403,8 @@ version = "0.4.3"
 source = { editable = "." }
 dependencies = [
     { name = "pydantic" },
-    { name = "typer" },
-]
-
-[package.optional-dependencies]
-tui = [
     { name = "textual" },
+    { name = "typer" },
 ]
 
 [package.dev-dependencies]
@@ -416,24 +412,19 @@ dev = [
     { name = "pytest" },
     { name = "pytest-cov" },
 ]
-tui = [
-    { name = "textual" },
-]
 
 [package.metadata]
 requires-dist = [
     { name = "pydantic", specifier = ">=2.5" },
-    { name = "textual", marker = "extra == 'tui'", specifier = ">=0.60" },
+    { name = "textual", specifier = ">=0.60" },
     { name = "typer", specifier = ">=0.12" },
 ]
-provides-extras = ["tui", "dev"]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "pytest", specifier = ">=8" },
     { name = "pytest-cov", specifier = ">=5" },
 ]
-tui = [{ name = "textual", specifier = ">=0.60" }]
 
 [[package]]
 name = "textual"

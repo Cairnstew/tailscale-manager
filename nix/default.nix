@@ -5,6 +5,6 @@ let
 in
 
 mkApplication {
-  venv = pythonSet.mkVirtualEnv "app-env" (workspace.deps.default // workspace.deps.tui);
+  venv = pythonSet.mkVirtualEnv "app-env" workspace.deps.default;
   package = pythonSet."tailscale-manager";
 }
