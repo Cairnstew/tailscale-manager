@@ -399,7 +399,7 @@ wheels = [
 
 [[package]]
 name = "tailscale-manager"
-version = "0.3.2"
+version = "0.4.3"
 source = { editable = "." }
 dependencies = [
     { name = "pydantic" },
@@ -416,6 +416,9 @@ dev = [
     { name = "pytest" },
     { name = "pytest-cov" },
 ]
+tui = [
+    { name = "textual" },
+]
 
 [package.metadata]
 requires-dist = [
@@ -430,6 +433,7 @@ dev = [
     { name = "pytest", specifier = ">=8" },
     { name = "pytest-cov", specifier = ">=5" },
 ]
+tui = [{ name = "textual", specifier = ">=0.60" }]
 
 [[package]]
 name = "textual"
