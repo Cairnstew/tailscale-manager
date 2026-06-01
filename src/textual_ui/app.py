@@ -13,6 +13,7 @@ from tailscale_manager.core.config import AppConfig
 from tailscale_manager.models.auth_key import TailscaleAuthKey
 from tailscale_manager.models.device import TailscaleDevice
 from tailscale_manager.repositories.state_repository import StateRepository
+from tailscale_manager.services.api_client import fetch_auth_keys
 
 
 def run_status_app(
@@ -253,7 +254,6 @@ class TailscaleManagerApp(TextualAppBase):
     ) -> None:
         super().__init__()
         self.app_config = config
-        self.initial_keys = keys
         self.initial_last_apply = last_apply
         self.devices_visible = True
 
@@ -273,9 +273,17 @@ class TailscaleManagerApp(TextualAppBase):
 
     def on_mount(self) -> None:
         self.title = f"Tailscale Manager — {self.app_config.tailnet}"
-        self._populate_auth_keys(self.initial_keys)
+        self._refresh_auth_keys()
         self._populate_devices()
         self.set_interval(30, self.action_refresh)
+
+    def _refresh_auth_keys(self) -> None:
+        try:
+            keys = fetch_auth_keys()
+        except Exception:
+            repo = StateRepository(self.app_config.state_dir)
+            keys = repo.get_managed_keys()
+        self._populate_auth_keys(keys)
 
     def _populate_auth_keys(self, keys: list[TailscaleAuthKey]) -> None:
         table = self.query_one("#auth-keys-table", DataTable)
@@ -315,9 +323,7 @@ class TailscaleManagerApp(TextualAppBase):
             table.add_row("(run apply to discover devices)", "", "", "", "")
 
     def action_refresh(self) -> None:
-        repo = StateRepository(self.app_config.state_dir)
-        keys = repo.get_managed_keys()
-        self._populate_auth_keys(keys)
+        self._refresh_auth_keys()
         self._populate_devices()
         sys_panel = self.query_one(SystemStatus)
         sys_panel.refresh_content()
