@@ -107,9 +107,6 @@ Managed keys: 1
    TAILSCALE_OAUTH_CLIENT_SECRET=<client-secret>
    ```
 
-> **Important**: set `tailnet = "-"` in your module config to auto-resolve
-> the tailnet from the OAuth credential. This is the recommended value.
-
 ### 3. Configure the module
 
 ```nix
@@ -151,7 +148,7 @@ All options under `services.tailscale-manager`.
 | Option | Type | Default | Description |
 |---|---|---|---|---|
 | `enable` | `bool` | `false` | Enable the tailscale-manager service |
-| `tailnet` | `string` | *(required)* | Tailnet name, e.g. `example.com`. Pass `"-"` to auto-resolve from the OAuth credential. |
+| `tailnet` | `string` | `"-"` | Tailnet name. `"-"` auto-resolves from the OAuth credential (recommended). |
 | `credentialsFile` | `null or path` | `null` | *(required via assertion)* Path to an EnvironmentFile containing `TAILSCALE_OAUTH_CLIENT_ID` and `TAILSCALE_OAUTH_CLIENT_SECRET`. Encrypt with agenix or sops-nix. |
 | `tags` | `list of strings` | `[]` | Tags to apply to the managed auth key (e.g. `["tag:ci"]`). All tags must start with `tag:`. The OAuth client must own these tags. |
 | `stateDir` | `string` | `/var/lib/tailscale-manager` | Directory for Terraform state and backups |
@@ -297,17 +294,19 @@ services.tailscale-manager = {
 ## CLI reference
 
 ```console
-tailscale-manager init          # terraform init + provider download + preflight scope check
-tailscale-manager plan          # terraform plan (shows pending changes)
-tailscale-manager apply         # backup → generate → init → apply
-tailscale-manager destroy       # backup → terraform destroy
-tailscale-manager status        # read-only TUI dashboard
-tailscale-manager status --json # JSON for scripting
-tailscale-manager devices       # list discovered devices from tfstate
+tailscale-manager doctor         # pre-flight configuration checks
+tailscale-manager doctor --check-api # + OAuth connectivity test
+tailscale-manager init           # terraform init + provider download + preflight scope check
+tailscale-manager plan           # terraform plan (shows pending changes)
+tailscale-manager apply          # backup → generate → init → apply
+tailscale-manager destroy        # backup → terraform destroy
+tailscale-manager status         # read-only TUI dashboard
+tailscale-manager status --json  # JSON for scripting
+tailscale-manager devices        # list discovered devices from tfstate
 tailscale-manager devices --json # JSON device list for scripting
-tailscale-manager backup-state  # manual tfstate backup
-tailscale-manager restore-state # manual tfstate restore
-tailscale-manager version       # show version
+tailscale-manager backup-state   # manual tfstate backup
+tailscale-manager restore-state  # manual tfstate restore
+tailscale-manager version        # show version
 ```
 
 ### Environment variables
@@ -316,7 +315,7 @@ tailscale-manager version       # show version
 |---|---|---|---|---|
 | `TAILSCALE_OAUTH_CLIENT_ID` | ✅ | — | Tailscale OAuth client ID |
 | `TAILSCALE_OAUTH_CLIENT_SECRET` | ✅ | — | Tailscale OAuth client secret |
-| `TAILSCALE_TAILNET` | ✅ | — | Tailnet name or `"-"` to auto-resolve |
+| `TAILSCALE_TAILNET` | — | `"-"` | Tailnet name — `"-"` auto-resolves from OAuth credential |
 | `TAILSCALE_MANAGER_STATE_DIR` | — | `/var/lib/tailscale-manager` | State and backup directory |
 | `TAILSCALE_MANAGER_TERRAFORM_BIN` | — | `terraform` | Terraform binary path |
 | `TAILSCALE_MANAGER_BACKUP_COUNT` | — | `5` | Number of backups to retain |
@@ -333,6 +332,8 @@ tailscale-manager version       # show version
 
 | Command | Exit 0 | Exit 1 |
 |---|---|---|
+| `doctor` | All checks passed | One or more checks failed |
+| `doctor --check-api` | Config + API checks passed | Config or API check failed |
 | `apply` | Key created/updated | Apply failed (error in `last-apply.json`) |
 | `destroy` | Key destroyed | Destroy failed |
 | `status --json` | Last result was `ok` | Last result was `error` |
@@ -375,6 +376,31 @@ On failure:
 
 ---
 
+## Diagnostics
+
+Run `tailscale-manager doctor` to check your configuration before applying:
+
+```
+$ tailscale-manager doctor
+
+Checking tailscale-manager configuration...
+
+  ✓  Credentials file         Found at /run/credentials/...
+  ✓  OAuth client ID          Set (tskey-client-...)
+  ✓  OAuth client secret      Set (••••••••)
+  ✓  Tailnet                  - (auto-resolve)
+  ✓  Terraform binary         /nix/store/.../bin/terraform (v1.9.x)
+  ✓  State directory          /var/lib/tailscale-manager (writable)
+  ✓  Terraform initialized    .terraform/ present
+  ✓  State file               terraform.tfstate present (permissions: 0600)
+
+Overall: All checks passed.
+```
+
+Add `--check-api` to also test OAuth connectivity to the Tailscale API.
+
+---
+
 ## Failure handling & recovery
 
 ```mermaid
@@ -403,31 +429,6 @@ Key guarantees:
 - **Systemd visibility**: non-zero exit code means `systemctl status
   tailscale-manager` shows red on failure. The error message is in the
   journal and `last-apply.json`.
-
----
-
-## Diagnostics
-
-Run `tailscale-manager doctor` to check your configuration before applying:
-
-```
-$ tailscale-manager doctor
-
-Checking tailscale-manager configuration...
-
-  ✓  Credentials file         Found at /run/credentials/...
-  ✓  OAuth client ID          Set (tskey-client-...)
-  ✓  OAuth client secret      Set (••••••••)
-  ✓  Tailnet                  - (auto-resolve)
-  ✓  Terraform binary         /nix/store/.../bin/terraform (v1.9.x)
-  ✓  State directory          /var/lib/tailscale-manager (writable)
-  ✓  Terraform initialized    .terraform/ present
-  ✓  State file               terraform.tfstate present (permissions: 0600)
-
-Overall: All checks passed.
-```
-
-Add `--check-api` to also test OAuth connectivity to the Tailscale API.
 
 ## Key rotation strategy
 
