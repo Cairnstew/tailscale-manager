@@ -891,6 +891,8 @@ in
         TAILSCALE_MANAGER_ACL_POLICY_PATH = "${cfg.stateDir}/policy.json";
       };
 
+      restartIfChanged = true;
+
       serviceConfig = {
         Type = "oneshot";
         StateDirectory = [ "tailscale-manager" ];
