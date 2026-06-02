@@ -130,6 +130,40 @@ class TestCredentialLoading:
         assert config.oauth_client_secret == "file-secret"
 
 
+class TestAuthKeysFromFile:
+    def test_loads_auth_keys_from_path(self, tmp_path: Path) -> None:
+        auth_file = tmp_path / "auth-keys.json"
+        auth_file.write_text('''
+        {
+            "ci-key": {
+                "description": "CI key",
+                "tags": ["tag:ci"],
+                "ephemeral": true
+            }
+        }
+        ''')
+        config = AppConfig(
+            tailnet="test.ts.net",
+            state_dir=tmp_path,
+            auth_keys_path=auth_file,
+        )
+        assert "ci-key" in config.auth_keys
+        assert config.auth_keys["ci-key"]["description"] == "CI key"
+        assert config.auth_keys["ci-key"]["ephemeral"] is True
+
+    def test_auth_keys_defaults_to_empty(self) -> None:
+        config = AppConfig(tailnet="test.ts.net", state_dir=Path("/tmp"))
+        assert config.auth_keys == {}
+
+    def test_auth_keys_path_non_existent_ignored(self, tmp_path: Path) -> None:
+        config = AppConfig(
+            tailnet="test.ts.net",
+            state_dir=tmp_path,
+            auth_keys_path=tmp_path / "nonexistent.json",
+        )
+        assert config.auth_keys == {}
+
+
 class TestTagValidator:
     def test_rejects_tags_without_prefix(self) -> None:
         with pytest.raises(ValidationError):

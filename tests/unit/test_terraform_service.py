@@ -230,6 +230,84 @@ def test_data_tf_has_devices_data_source(tmp_path: Path) -> None:
     assert "all" in data["data"]["tailscale_devices"]
 
 
+def test_keys_tf_uses_auth_keys_when_provided(tmp_path: Path) -> None:
+    auth_keys = {
+        "ci-key": {
+            "description": "CI pipeline key",
+            "tags": ["tag:ci"],
+            "reusable": True,
+            "ephemeral": True,
+            "preauthorized": False,
+            "recreateIfInvalid": "always",
+        },
+        "monitoring": {
+            "description": "Monitoring key",
+            "tags": ["tag:monitoring"],
+            "reusable": False,
+            "ephemeral": False,
+            "preauthorized": True,
+            "recreateIfInvalid": "never",
+        },
+    }
+    config = AppConfig(
+        tailnet="test.ts.net",
+        state_dir=tmp_path,
+        auth_keys=auth_keys,
+    )
+    svc = TerraformService(config)
+    svc.write_configs()
+    data = json.loads((tmp_path / "keys.tf.json").read_text())
+
+    keys = data["resource"]["tailscale_tailnet_key"]
+    assert "ci-key" in keys
+    assert "monitoring" in keys
+    assert keys["ci-key"]["description"] == "CI pipeline key"
+    assert keys["ci-key"]["tags"] == ["tag:ci"]
+    assert keys["ci-key"]["ephemeral"] is True
+    assert keys["ci-key"]["preauthorized"] is False
+    assert keys["monitoring"]["reusable"] is False
+    assert keys["monitoring"]["recreate_if_invalid"] == "never"
+
+
+def test_keys_tf_falls_back_to_legacy_when_no_keys(tmp_path: Path) -> None:
+    config = AppConfig(
+        tailnet="test.ts.net",
+        state_dir=tmp_path,
+        tags=["tag:legacy"],
+    )
+    svc = TerraformService(config)
+    svc.write_configs()
+    data = json.loads((tmp_path / "keys.tf.json").read_text())
+
+    keys = data["resource"]["tailscale_tailnet_key"]
+    assert "managed_key" in keys
+    assert keys["managed_key"]["tags"] == ["tag:legacy"]
+
+
+def test_keys_tf_sanitizes_resource_names(tmp_path: Path) -> None:
+    auth_keys = {
+        "my-ci-key": {
+            "description": "ci",
+            "tags": [],
+        },
+        "123start_with_digit": {
+            "description": "digit start",
+            "tags": [],
+        },
+    }
+    config = AppConfig(
+        tailnet="test.ts.net",
+        state_dir=tmp_path,
+        auth_keys=auth_keys,
+    )
+    svc = TerraformService(config)
+    svc.write_configs()
+    data = json.loads((tmp_path / "keys.tf.json").read_text())
+    keys = data["resource"]["tailscale_tailnet_key"]
+    assert "my-ci-key" in keys
+    assert "_123start_with_digit" in keys
+
+
 def test_app_config_rejects_tags_without_prefix() -> None:
     with pytest.raises(ValidationError):
         AppConfig(

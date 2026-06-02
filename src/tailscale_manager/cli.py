@@ -19,7 +19,9 @@ from rich.panel import Panel
 
 from tailscale_manager.core.config import AppConfig
 from tailscale_manager.core.exceptions import ConfigurationError, TerraformError
+from tailscale_manager.models.auth_key import TailscaleAuthKey
 from tailscale_manager.repositories.state_repository import StateRepository
+from tailscale_manager.services.api_client import create_auth_key, fetch_auth_keys, revoke_auth_key
 from tailscale_manager.services.terraform_service import TerraformService
 from tailscale_manager.utils.subprocess_helpers import _find_hint, run_terraform
 
@@ -331,6 +333,166 @@ def version() -> None:
     """Show tailscale-manager version."""
     v = importlib.metadata.version("tailscale-manager")
     print(f"tailscale-manager {v}")
+
+
+# ── auth-keys subcommand ──────────────────────────────────────
+
+auth_keys_app = typer.Typer(
+    name="auth-keys",
+    help="Manage Tailscale auth keys via the Tailscale API",
+    rich_help_panel="Management",
+)
+
+
+@auth_keys_app.command()
+def create(
+    description: str = typer.Option(
+        ..., "--description", "-d",
+        help="Human-readable description for the key",
+    ),
+    tags: list[str] = typer.Option(
+        [], "--tag", "-t",
+        help="Tags to apply (e.g. tag:ci). Repeatable.",
+    ),
+    reusable: bool = typer.Option(
+        True, "--reusable/--no-reusable",
+        help="Allow multiple devices to use this key",
+    ),
+    ephemeral: bool = typer.Option(
+        False, "--ephemeral/--persistent",
+        help="Ephemeral devices are removed on disconnect",
+    ),
+    preauthorized: bool = typer.Option(
+        True, "--preauthorized/--not-preauthorized",
+        help="Pre-approve devices using this key",
+    ),
+    expiry: str | None = typer.Option(
+        None, "--expiry", "-e",
+        help="Key expiry duration (e.g. 24h, 7d). Omit for no expiry.",
+    ),
+) -> None:
+    """Create a new auth key and print it once."""
+    config = _load_config()
+    config.assert_credentials()
+
+    expiry_seconds: int | None = None
+    if expiry:
+        import re
+        m = re.match(r"^(\d+)([smhd])$", expiry)
+        if not m:
+            _error_console.print(f"Invalid expiry format: {expiry}")
+            _error_console.print("Use e.g. 30m, 24h, 7d")
+            raise typer.Exit(1)
+        value, unit = int(m.group(1)), m.group(2)
+        multipliers = {"s": 1, "m": 60, "h": 3600, "d": 86400}
+        expiry_seconds = value * multipliers[unit]
+
+    _console.print("Creating auth key...")
+    result = create_auth_key(
+        tailnet=config.tailnet,
+        description=description,
+        tags=tags,
+        reusable=reusable,
+        ephemeral=ephemeral,
+        preauthorized=preauthorized,
+        expiry_seconds=expiry_seconds,
+        client_id=config.oauth_client_id,
+        client_secret=config.oauth_client_secret,
+    )
+    _console.print()
+    _console.print("Auth key created:")
+    _console.print(f"  ID:          {result.id}")
+    _console.print(f"  Description: {result.description}")
+    _console.print(f"  Tags:        {', '.join(result.tags) if result.tags else '-'}")
+    _console.print(f"  Reusable:    {result.reusable}")
+    _console.print(f"  Ephemeral:   {result.ephemeral}")
+    _console.print(f"  Preauth:     {result.preauthorized}")
+    if result.expiry:
+        _console.print(f"  Expires:     {result.expiry.isoformat()}")
+    _console.print()
+    _console.print("[bold yellow]Key value (shown once):[/]")
+    _console.print(f"[bold cyan]{result.key}[/]")
+    _console.print()
+    _console.print("[yellow]⚠ Store this key securely. It cannot be retrieved again.[/]")
+
+
+@auth_keys_app.command("list")
+def _list_keys(
+    json_output: bool = typer.Option(
+        False,
+        "--json",
+        help="Output as JSON array",
+    ),
+) -> None:
+    """List all auth keys on the tailnet."""
+    config = _load_config()
+    config.assert_credentials()
+
+    keys = fetch_auth_keys(
+        tailnet=config.tailnet,
+        client_id=config.oauth_client_id,
+        client_secret=config.oauth_client_secret,
+    )
+
+    if json_output:
+        print(json.dumps(
+            [
+                {
+                    "id": k.id,
+                    "description": k.description,
+                    "tags": k.tags,
+                    "expiry": k.expiry.isoformat() if k.expiry else None,
+                    "revoked": k.revoked,
+                    "reusable": k.reusable,
+                    "ephemeral": k.ephemeral,
+                    "preauthorized": k.preauthorized,
+                    "created_at": k.created_at.isoformat() if k.created_at else None,
+                }
+                for k in keys
+            ],
+            indent=2,
+            default=str,
+        ))
+        return
+
+    if not keys:
+        _console.print("No auth keys found.")
+        return
+
+    _console.print(f"Auth keys ({len(keys)}):")
+    _console.print()
+    for k in keys:
+        status = "✓" if not k.revoked else "✗ (revoked)"
+        _console.print(f"  {status}  {k.id}")
+        _console.print(f"         {k.description or '<no description>'}")
+        if k.tags:
+            _console.print(f"         tags: {', '.join(k.tags)}")
+        if k.expiry:
+            _console.print(f"         expires: {k.expiry.isoformat()}")
+        _console.print()
+
+
+@auth_keys_app.command()
+def revoke(
+    key_id: str = typer.Argument(
+        ...,
+        help="ID of the auth key to revoke",
+    ),
+) -> None:
+    """Revoke an auth key by ID."""
+    config = _load_config()
+    config.assert_credentials()
+
+    revoke_auth_key(
+        key_id=key_id,
+        tailnet=config.tailnet,
+        client_id=config.oauth_client_id,
+        client_secret=config.oauth_client_secret,
+    )
+    _console.print(f"Auth key [cyan]{key_id}[/] revoked.")
+
+
+app.add_typer(auth_keys_app)
 
 
 # ── doctor command ────────────────────────────────────────────

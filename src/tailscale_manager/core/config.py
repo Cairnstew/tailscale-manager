@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 from typing import Any, Literal
@@ -53,6 +54,22 @@ class AppConfig(BaseModel):
         description=(
             "Tailscale Terraform provider version constraint. "
             "Set via TAILSCALE_MANAGER_PROVIDER_VERSION."
+        ),
+    )
+
+    auth_keys: dict[str, Any] = Field(
+        default_factory=dict,
+        description=(
+            "Auth keys declared via Nix module. "
+            "Loaded from TAILSCALE_MANAGER_AUTH_KEYS_PATH JSON file."
+        ),
+    )
+    auth_keys_path: Path | None = Field(
+        default=None,
+        validation_alias="TAILSCALE_MANAGER_AUTH_KEYS_PATH",
+        description=(
+            "Path to a JSON file containing declared auth keys. "
+            "Set via TAILSCALE_MANAGER_AUTH_KEYS_PATH."
         ),
     )
 
@@ -169,6 +186,10 @@ class AppConfig(BaseModel):
             path = Path(self.acl_policy_path)
             if path.exists():
                 self.acl_policy = path.read_text()
+        if self.auth_keys_path is not None:
+            path = Path(self.auth_keys_path)
+            if path.exists():
+                self.auth_keys = json.loads(path.read_text())
         return self
 
     def assert_credentials(self) -> None:
@@ -260,6 +281,11 @@ class AppConfig(BaseModel):
         )
         acl_policy_path = Path(acl_policy_path_raw) if acl_policy_path_raw else None
 
+        auth_keys_path_raw = os.environ.get(
+            "TAILSCALE_MANAGER_AUTH_KEYS_PATH", ""
+        )
+        auth_keys_path = Path(auth_keys_path_raw) if auth_keys_path_raw else None
+
         return cls(
             tailnet=tailnet,
             state_dir=state_dir,
@@ -273,4 +299,5 @@ class AppConfig(BaseModel):
             acl_enable=acl_enable,
             acl_format=acl_format,
             acl_policy_path=acl_policy_path,
+            auth_keys_path=auth_keys_path,
         )

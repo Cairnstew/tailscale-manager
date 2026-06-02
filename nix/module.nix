@@ -169,6 +169,17 @@ let
     install -m 0600 ${policyStore} ${cfg.stateDir}/policy.json
   '';
 
+  # ── Auth keys serialization ───────────────────────────────────────────
+
+  authKeysJSON = builtins.toJSON cfg.authKeys;
+  hasAuthKeys = authKeysJSON != "{}";
+
+  authKeysStore = pkgs.writeText "tailscale-auth-keys.json" authKeysJSON;
+  authKeysWriter = pkgs.writeShellScript "write-tailscale-auth-keys" ''
+    mkdir -p ${cfg.stateDir}
+    install -m 0600 ${authKeysStore} ${cfg.stateDir}/auth-keys.json
+  '';
+
   # App connector duplicate name detection
   hasDuplicateConnectorNames =
     let
@@ -279,6 +290,67 @@ in
       type = lib.types.str;
       default = "~> 0.29";
       description = "Tailscale Terraform provider version constraint.";
+    };
+
+    authKeys = lib.mkOption {
+      type = lib.types.attrsOf (lib.types.submodule {
+        options = {
+          description = lib.mkOption {
+            type = lib.types.str;
+            description = "Human-readable description for this auth key";
+            example = "CI pipeline key";
+          };
+          tags = lib.mkOption {
+            type = lib.types.listOf lib.types.str;
+            default = [];
+            description = "Tags to apply to this auth key";
+            example = ["tag:ci"];
+          };
+          reusable = lib.mkOption {
+            type = lib.types.bool;
+            default = true;
+            description = "Allow multiple devices to use this key";
+          };
+          ephemeral = lib.mkOption {
+            type = lib.types.bool;
+            default = false;
+            description = "Ephemeral devices are removed on disconnect";
+          };
+          preauthorized = lib.mkOption {
+            type = lib.types.bool;
+            default = true;
+            description = "Pre-approve devices using this key";
+          };
+          recreateIfInvalid = lib.mkOption {
+            type = lib.types.enum [ "always" "never" ];
+            default = "always";
+            description = ''
+              Whether to recreate this key if it becomes invalid
+              (expired, revoked, or deleted).
+            '';
+          };
+        };
+      });
+      default = {};
+      description = ''
+        Declare multiple auth keys. When non-empty, these replace the
+        top-level tags and recreateIfInvalid options.
+
+        Each attr name becomes the Terraform resource name (hyphens
+        are converted to underscores).
+      '';
+      example = {
+        ci-key = {
+          description = "CI pipeline key";
+          tags = ["tag:ci"];
+          ephemeral = true;
+        };
+        monitoring = {
+          description = "Monitoring service key";
+          tags = ["tag:monitoring"];
+          reusable = false;
+        };
+      };
     };
 
     dns = {
@@ -889,6 +961,8 @@ in
         TAILSCALE_MANAGER_ACL_FORMAT = "${cfg.acl.format}";
       } // lib.optionalAttrs hasPolicyFile {
         TAILSCALE_MANAGER_ACL_POLICY_PATH = "${cfg.stateDir}/policy.json";
+      } // lib.optionalAttrs hasAuthKeys {
+        TAILSCALE_MANAGER_AUTH_KEYS_PATH = "${cfg.stateDir}/auth-keys.json";
       };
 
       restartIfChanged = true;
@@ -899,7 +973,8 @@ in
         StateDirectoryMode = "0700";
         WorkingDirectory = cfg.stateDir;
         LoadCredential = "tailscale-oauth:${cfg.credentialsFile}";
-        ExecStartPre = lib.mkIf hasPolicyFile (toString policyWriter);
+        ExecStartPre = lib.optional hasPolicyFile (toString policyWriter)
+          ++ lib.optional hasAuthKeys (toString authKeysWriter);
         ExecStart = "${cfg.package}/bin/tailscale-manager apply";
         ReadWritePaths = [ cfg.stateDir ];
         NoNewPrivileges = true;

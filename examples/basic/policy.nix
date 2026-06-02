@@ -6,6 +6,22 @@
     tailnet = "tail685690.ts.net";
     credentialsFile = config.age.secrets.tailscale-oauth.path;
 
+    # Declare multiple auth keys — replaces the top-level `tags` option.
+    # Each key becomes a tailscale_tailnet_key Terraform resource.
+    # Keys are created on `tailscale-manager apply` (runs on every nixos-rebuild).
+    authKeys = {
+      ci-key = {
+        description = "CI pipeline key";
+        tags = ["tag:ci"];
+        ephemeral = true;
+      };
+      monitoring = {
+        description = "Monitoring service key";
+        tags = ["tag:monitoring"];
+        reusable = false;
+      };
+    };
+
     acl = {
       enable = true;
       format = "hujson";

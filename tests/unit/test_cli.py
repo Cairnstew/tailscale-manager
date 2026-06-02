@@ -20,7 +20,7 @@ runner = CliRunner()
 def test_help_shows_subcommands() -> None:
     result = runner.invoke(app, ["--help"])
     assert result.exit_code == 0
-    for cmd in ["init", "plan", "apply", "destroy", "status", "devices", "doctor", "backup-state", "restore-state"]:
+    for cmd in ["init", "plan", "apply", "destroy", "status", "devices", "doctor", "backup-state", "restore-state", "auth-keys"]:
         assert cmd in result.stdout
 
 
@@ -203,6 +203,39 @@ class TestDoctor:
         result = runner.invoke(app, ["doctor", "--check-api"])
         assert "API connectivity" in result.stdout
         assert "Skipped" in result.stdout
+
+
+# ── Auth keys subcommand tests ────────────────────────────────
+
+
+class TestAuthKeys:
+    def test_auth_keys_help_shows_subcommands(self) -> None:
+        result = runner.invoke(app, ["auth-keys", "--help"])
+        assert result.exit_code == 0
+        for cmd in ["create", "list", "revoke"]:
+            assert cmd in result.stdout
+
+    def test_create_requires_credentials(self, tmp_path, monkeypatch) -> None:
+        monkeypatch.setenv("TAILSCALE_MANAGER_STATE_DIR", str(tmp_path))
+        monkeypatch.delenv("TAILSCALE_OAUTH_CLIENT_ID", raising=False)
+        monkeypatch.delenv("TAILSCALE_OAUTH_CLIENT_SECRET", raising=False)
+        result = runner.invoke(app, [
+            "auth-keys", "create",
+            "--description", "test",
+        ])
+        assert result.exit_code == 1
+
+    def test_list_requires_credentials(self, tmp_path, monkeypatch) -> None:
+        monkeypatch.setenv("TAILSCALE_MANAGER_STATE_DIR", str(tmp_path))
+        monkeypatch.delenv("TAILSCALE_OAUTH_CLIENT_ID", raising=False)
+        monkeypatch.delenv("TAILSCALE_OAUTH_CLIENT_SECRET", raising=False)
+        result = runner.invoke(app, ["auth-keys", "list"])
+        assert result.exit_code == 1
+
+    def test_revoke_requires_key_id(self) -> None:
+        result = runner.invoke(app, ["auth-keys", "revoke"])
+        assert result.exit_code != 0
+        assert result.exit_code == 2
 
 
 # ── First-run guidance tests ─────────────────────────────────

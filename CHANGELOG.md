@@ -4,6 +4,28 @@ All notable changes to this project will be documented in this file.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
+## [0.5.0] - 2026-06-02
+
+### Added
+
+- **`tailscale-manager auth-keys` CLI subcommand**: Create, list, and revoke
+  auth keys via the Tailscale API directly (no Terraform). `create` prints the
+  key value once with a warning; `list` supports `--json` output; `revoke`
+  takes a key ID.
+- **`services.tailscale-manager.authKeys` Nix option**: Declare multiple named
+  auth keys with per-key `description`, `tags`, `reusable`, `ephemeral`,
+  `preauthorized`, and `recreateIfInvalid`. Each key becomes a
+  `tailscale_tailnet_key` Terraform resource. When non-empty, replaces the
+  top-level `tags` / `recreateIfInvalid` legacy options. Serialized to JSON
+  at build time via `ExecStartPre`, applied by the existing systemd service.
+- **Backward compatible**: `authKeys = {}` (default) preserves legacy single-key
+  behavior via top-level `tags` / `recreateIfInvalid`.
+
+### Security
+
+- **`.envrc` removed from git**: The `.envrc` file (containing real OAuth
+  credentials) is now gitignored and untracked. Rotate exposed credentials.
+
 ## [0.4.3] - 2026-06-01
 
 ### Fixed

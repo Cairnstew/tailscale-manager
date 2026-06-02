@@ -42,6 +42,7 @@ class TerraformService:
         self.config.state_dir.mkdir(parents=True, exist_ok=True)
 
         tags = self.config.tags
+        auth_keys = self.config.auth_keys or None
 
         main_cfg = {
             "terraform": {
@@ -60,6 +61,7 @@ class TerraformService:
         keys_cfg = build_keys_config(
             tags=tags,
             recreate_if_invalid=self.config.recreate_if_invalid,
+            auth_keys=auth_keys,
         )
 
         data_cfg = build_devices_config()

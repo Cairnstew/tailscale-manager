@@ -49,6 +49,38 @@ def _api_get(path: str, client_id: str = "", client_secret: str = "") -> Any:
         return json.loads(resp.read())
 
 
+def _api_post(
+    path: str,
+    data: dict[str, Any],
+    client_id: str = "",
+    client_secret: str = "",
+) -> Any:
+    token = _get_oauth_token(client_id, client_secret)
+    body = json.dumps(data).encode()
+    req = urllib.request.Request(
+        f"{API_BASE}{path}",
+        data=body,
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    with urllib.request.urlopen(req) as resp:
+        return json.loads(resp.read())
+
+
+def _api_delete(path: str, client_id: str = "", client_secret: str = "") -> None:
+    token = _get_oauth_token(client_id, client_secret)
+    req = urllib.request.Request(
+        f"{API_BASE}{path}",
+        headers={"Authorization": f"Bearer {token}"},
+        method="DELETE",
+    )
+    with urllib.request.urlopen(req):
+        pass
+
+
 def _parse_ts(value: str | None) -> datetime | None:
     if value is None:
         return None
@@ -78,3 +110,65 @@ def fetch_auth_keys(tailnet: str = "-", client_id: str = "", client_secret: str 
             key=None,
         ))
     return keys
+
+
+def create_auth_key(
+    tailnet: str = "-",
+    description: str = "",
+    tags: list[str] | None = None,
+    reusable: bool = True,
+    ephemeral: bool = False,
+    preauthorized: bool = True,
+    expiry_seconds: int | None = None,
+    client_id: str = "",
+    client_secret: str = "",
+) -> TailscaleAuthKey:
+    body: dict[str, Any] = {
+        "capabilities": {
+            "devices": {
+                "create": {
+                    "reusable": reusable,
+                    "ephemeral": ephemeral,
+                    "preauthorized": preauthorized,
+                    "tags": tags or [],
+                }
+            }
+        },
+        "description": description,
+    }
+    if expiry_seconds is not None:
+        body["expirySeconds"] = expiry_seconds
+
+    data = _api_post(
+        f"/tailnet/{tailnet}/keys",
+        data=body,
+        client_id=client_id,
+        client_secret=client_secret,
+    )
+    caps = data.get("capabilities", {}).get("devices", {}).get("create", {})
+    return TailscaleAuthKey(
+        id=data.get("id", ""),
+        description=data.get("description", ""),
+        tags=caps.get("tags", []),
+        expiry=_parse_ts(data.get("expires")),
+        revoked=False,
+        reusable=caps.get("reusable", False),
+        ephemeral=caps.get("ephemeral", False),
+        preauthorized=caps.get("preauthorized", False),
+        created_at=_parse_ts(data.get("created")),
+        key=data.get("key"),
+    )
+
+
+def revoke_auth_key(
+    key_id: str,
+    tailnet: str = "-",
+    client_id: str = "",
+    client_secret: str = "",
+) -> None:
+    _api_post(
+        f"/tailnet/{tailnet}/keys/{key_id}/revoke",
+        data={},
+        client_id=client_id,
+        client_secret=client_secret,
+    )
