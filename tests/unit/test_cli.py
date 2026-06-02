@@ -208,6 +208,70 @@ class TestDoctor:
 # ── Auth keys subcommand tests ────────────────────────────────
 
 
+class TestShowKey:
+    def test_show_key_prints_key_value(self, tmp_path, monkeypatch) -> None:
+        monkeypatch.setenv("TAILSCALE_MANAGER_STATE_DIR", str(tmp_path))
+        tfstate = tmp_path / "terraform.tfstate"
+        tfstate.write_text(json.dumps({
+            "resources": [{
+                "mode": "managed",
+                "type": "tailscale_tailnet_key",
+                "name": "ci-key",
+                "instances": [{
+                    "attributes": {
+                        "id": "k123",
+                        "key": "tskey-auth-k123-abc",
+                        "description": "CI key",
+                        "tags": ["tag:ci"],
+                    }
+                }]
+            }]
+        }))
+        result = runner.invoke(app, ["auth-keys", "show-key", "ci-key"])
+        assert result.exit_code == 0, result.stdout
+        assert "tskey-auth-k123-abc" in result.stdout
+        assert "WARNING" in result.stderr
+
+    def test_show_key_missing_name(self) -> None:
+        result = runner.invoke(app, ["auth-keys", "show-key"])
+        assert result.exit_code == 2
+
+    def test_show_key_not_found(self, tmp_path, monkeypatch) -> None:
+        monkeypatch.setenv("TAILSCALE_MANAGER_STATE_DIR", str(tmp_path))
+        tfstate = tmp_path / "terraform.tfstate"
+        tfstate.write_text(json.dumps({"resources": []}))
+        result = runner.invoke(app, ["auth-keys", "show-key", "missing-key"])
+        assert result.exit_code == 1
+        assert "not found" in result.stderr
+
+    def test_show_key_no_value_in_state(self, tmp_path, monkeypatch) -> None:
+        monkeypatch.setenv("TAILSCALE_MANAGER_STATE_DIR", str(tmp_path))
+        tfstate = tmp_path / "terraform.tfstate"
+        tfstate.write_text(json.dumps({
+            "resources": [{
+                "mode": "managed",
+                "type": "tailscale_tailnet_key",
+                "name": "old-key",
+                "instances": [{
+                    "attributes": {
+                        "id": "k456",
+                        "key": None,
+                        "description": "Old key",
+                    }
+                }]
+            }]
+        }))
+        result = runner.invoke(app, ["auth-keys", "show-key", "old-key"])
+        assert result.exit_code == 1
+        assert "no stored value" in result.stderr
+
+    def test_show_key_no_state_file(self, tmp_path, monkeypatch) -> None:
+        monkeypatch.setenv("TAILSCALE_MANAGER_STATE_DIR", str(tmp_path))
+        result = runner.invoke(app, ["auth-keys", "show-key", "ci-key"])
+        assert result.exit_code == 1
+        assert "not found" in result.stderr
+
+
 class TestAuthKeys:
     def test_auth_keys_help_shows_subcommands(self) -> None:
         result = runner.invoke(app, ["auth-keys", "--help"])

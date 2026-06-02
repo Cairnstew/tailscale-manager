@@ -19,6 +19,61 @@ def test_read_state_parses_valid_tfstate(tmp_path: Path) -> None:
     assert state["version"] == 1
 
 
+def test_get_key_by_name_found(tmp_path: Path) -> None:
+    state_file = tmp_path / "terraform.tfstate"
+    state_file.write_text("""
+    {
+      "version": 1,
+      "resources": [
+        {
+          "type": "tailscale_tailnet_key",
+          "name": "ci-key",
+          "instances": [
+            {
+              "attributes": {
+                "id": "k123",
+                "key": "tskey-auth-k123-abc",
+                "description": "CI key"
+              }
+            }
+          ]
+        },
+        {
+          "type": "tailscale_tailnet_key",
+          "name": "other-key",
+          "instances": [
+            {
+              "attributes": {
+                "id": "k456",
+                "key": "tskey-auth-k456-xyz",
+                "description": "Other key"
+              }
+            }
+          ]
+        }
+      ]
+    }
+    """)
+    repo = StateRepository(tmp_path)
+    key = repo.get_key_by_name("ci-key")
+    assert key is not None
+    assert key.id == "k123"
+    assert key.key == "tskey-auth-k123-abc"
+    assert key.description == "CI key"
+
+    other = repo.get_key_by_name("other-key")
+    assert other is not None
+    assert other.key == "tskey-auth-k456-xyz"
+
+    missing = repo.get_key_by_name("nonexistent")
+    assert missing is None
+
+
+def test_get_key_by_name_no_state_returns_none(tmp_path: Path) -> None:
+    repo = StateRepository(tmp_path)
+    assert repo.get_key_by_name("ci-key") is None
+
+
 def test_get_managed_keys_empty_when_no_state(tmp_path: Path) -> None:
     repo = StateRepository(tmp_path)
     keys = repo.get_managed_keys()

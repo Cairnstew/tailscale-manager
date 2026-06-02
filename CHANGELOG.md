@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
+## [0.5.1] - 2026-06-02
+
+### Added
+
+- **`tailscale-manager auth-keys show-key <name>`**: Retrieve a declared auth
+  key's value from Terraform state. Reads from `terraform.tfstate` where Terraform
+  stores the key value. Prints the key to stdout with a warning on stderr.
+  Accessible via `nix run .#show-key -- <name>`.
+- **`nix run .#show-key`**: Nix flakes app target that wraps the
+  `auth-keys show-key` CLI command.
+
+### Security
+
+- Key values are read from the state file at runtime — never baked into the
+  Nix store. State file is 0600, root-owned. Warning printed to stderr before
+  the key value to stdout for safe piping.
+
 ## [0.5.0] - 2026-06-02
 
 ### Added

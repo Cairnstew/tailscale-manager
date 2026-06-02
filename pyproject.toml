@@ -1,6 +1,6 @@
 [project]
 name = "tailscale-manager"
-version = "0.5.0"
+version = "0.5.1"
 description = "NixOS module + CLI for managing Tailscale auth keys via Terraform"
 readme = "README.md"
 license = { text = "MIT" }

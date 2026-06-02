@@ -19,6 +19,32 @@ class StateRepository:
         raw = self.state_file.read_text()
         return json.loads(raw)
 
+    def get_key_by_name(self, name: str) -> TailscaleAuthKey | None:
+        """Look up a single key by its Terraform resource name."""
+        state = self.read_state()
+        if state is None:
+            return None
+        for res in state.get("resources", []):
+            if res.get("type") != "tailscale_tailnet_key":
+                continue
+            if res.get("name") != name:
+                continue
+            for instance in res.get("instances", []):
+                attrs = instance.get("attributes", {})
+                return TailscaleAuthKey(
+                    id=attrs.get("id", ""),
+                    description=attrs.get("description", ""),
+                    tags=attrs.get("tags", []),
+                    expiry=self._parse_ts(attrs.get("expires")),
+                    revoked=attrs.get("revoked", False),
+                    reusable=attrs.get("reusable", True),
+                    ephemeral=attrs.get("ephemeral", False),
+                    preauthorized=attrs.get("preauthorized", True),
+                    created_at=self._parse_ts(attrs.get("created_at")),
+                    key=attrs.get("key"),
+                )
+        return None
+
     def get_managed_keys(self) -> list[TailscaleAuthKey]:
         state = self.read_state()
         if state is None:

@@ -472,6 +472,45 @@ def _list_keys(
         _console.print()
 
 
+@auth_keys_app.command("show-key")
+def _show_key(
+    key_name: str = typer.Argument(
+        ...,
+        help="Terraform resource name of the auth key (e.g. ci-key)",
+    ),
+) -> None:
+    """Retrieve a declared key's value from Terraform state.
+    
+    This reads the key value from the Terraform state file
+    at TAILSCALE_MANAGER_STATE_DIR/terraform.tfstate.
+    The value is stored there by Terraform when the key is created.
+    
+    The key is printed to stdout. A warning is printed to stderr.
+    """
+    config = _load_config()
+    repo = StateRepository(config.state_dir)
+
+    key = repo.get_key_by_name(key_name)
+    if key is None:
+        _error_console.print(
+            f"Key [bold]{key_name}[/] not found in Terraform state.\n"
+            f"  Run [bold]tailscale-manager apply[/] first to create it."
+        )
+        raise typer.Exit(1)
+
+    if not key.key:
+        _error_console.print(
+            f"Key [bold]{key_name}[/] has no stored value.\n"
+            f"  The key may have been created before this feature was added.\n"
+            f"  Recreate it with [bold]tailscale-manager auth-keys create[/] "
+            f"or remove and re-apply."
+        )
+        raise typer.Exit(1)
+
+    print("WARNING: Key value shown once. Store it securely.", file=sys.stderr)
+    print(key.key)
+
+
 @auth_keys_app.command()
 def revoke(
     key_id: str = typer.Argument(

@@ -113,5 +113,13 @@
           pythonSet = p.pythonSet;
         }
       );
+
+      apps = forAllSystems (system: {
+        show-key = {
+          type = "app";
+          program = "${self.packages.${system}.default}/bin/tailscale-manager";
+          args = [ "auth-keys" "show-key" ];
+        };
+      });
     };
 }
