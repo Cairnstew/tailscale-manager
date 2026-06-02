@@ -318,7 +318,7 @@ in
     };
 
     authKeys = lib.mkOption {
-      type = lib.types.attrsOf (lib.types.submodule ({ name, config: keyConfig, ... }: {
+      type = lib.types.attrsOf (lib.types.submodule ({ name, config, ... }: {
         options = {
           description = lib.mkOption {
             type = lib.types.str;
@@ -405,8 +405,8 @@ in
           };
         };
 
-        config = lib.mkIf keyConfig.exportPath.enable {
-          path = lib.mkDefault keyConfig.exportPath.path;
+        config = lib.mkIf config.exportPath.enable {
+          path = lib.mkDefault config.exportPath.path;
         };
       }));
       default = {};
