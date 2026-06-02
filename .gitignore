@@ -43,6 +43,9 @@ result-*
 Thumbs.db
 *.DS_Store
 
+# ── Environment / secrets ───────────────────────────
+.envrc
+
 # ── Testing & coverage ──────────────────────────────
 .pytest_cache/
 .coverage
