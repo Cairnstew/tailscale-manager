@@ -51,7 +51,7 @@ def build_keys_config(
             resource = _sanitize_resource_name(key_name)
             tf_key_ref = f"tailscale_tailnet_key.{resource}.key"
             local_files[f"key_{resource}"] = {
-                "sensitive_content": f"${{{tf_key_ref}}}",
+                "content": f"${{{tf_key_ref}}}",
                 "filename": export_cfg["path"],
                 "file_permission": "0600",
             }

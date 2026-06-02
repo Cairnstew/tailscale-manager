@@ -75,7 +75,7 @@ class TestBuildKeysConfigExports:
         assert "local_sensitive_file" in resource
         lsf = resource["local_sensitive_file"]
         assert "key_ci_key" in lsf
-        assert lsf["key_ci_key"]["sensitive_content"] == "${tailscale_tailnet_key.ci_key.key}"
+        assert lsf["key_ci_key"]["content"] == "${tailscale_tailnet_key.ci_key.key}"
         assert lsf["key_ci_key"]["filename"] == "/tmp/ci-key"
         assert lsf["key_ci_key"]["file_permission"] == "0600"
 
@@ -128,7 +128,7 @@ class TestBuildKeysConfigExports:
         tf_key = resource["tailscale_tailnet_key"]
         assert "my_ci_key" in tf_key
         lsf = resource["local_sensitive_file"]
-        assert lsf["key_my_ci_key"]["sensitive_content"] == "${tailscale_tailnet_key.my_ci_key.key}"
+        assert lsf["key_my_ci_key"]["content"] == "${tailscale_tailnet_key.my_ci_key.key}"
 
     def test_export_leading_digit_sanitized(self) -> None:
         result = build_keys_config(
@@ -145,7 +145,7 @@ class TestBuildKeysConfigExports:
         )
         lsf = result["resource"]["local_sensitive_file"]
         assert "key__123key" in lsf
-        assert lsf["key__123key"]["sensitive_content"] == "${tailscale_tailnet_key._123key.key}"
+        assert lsf["key__123key"]["content"] == "${tailscale_tailnet_key._123key.key}"
 
     def test_export_always_uses_0600_permission(self) -> None:
         result = build_keys_config(
