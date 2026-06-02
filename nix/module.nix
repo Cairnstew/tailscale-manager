@@ -180,6 +180,31 @@ let
     install -m 0600 ${authKeysStore} ${cfg.stateDir}/auth-keys.json
   '';
 
+  # ── Auth key file export ──────────────────────────────────────────────
+
+  exportedKeys = lib.filterAttrs (name: keyCfg: keyCfg.exportPath.enable) cfg.authKeys;
+
+  hasExportedKeys = exportedKeys != {};
+
+  authKeyExportsJSON = builtins.toJSON (lib.mapAttrs (name: keyCfg: {
+    path  = keyCfg.exportPath.path;
+    owner = keyCfg.exportPath.owner;
+    group = keyCfg.exportPath.group;
+    mode  = keyCfg.exportPath.mode;
+  }) exportedKeys);
+
+  chownScript = pkgs.writeShellScript "tailscale-manager-chown-keys" (
+    lib.concatStringsSep "\n" (lib.mapAttrsToList (name: keyCfg: ''
+      if [ -f "${keyCfg.exportPath.path}" ]; then
+        chown ${keyCfg.exportPath.owner}:${keyCfg.exportPath.group} \
+          "${keyCfg.exportPath.path}"
+        chmod ${keyCfg.exportPath.mode} "${keyCfg.exportPath.path}"
+      fi
+    '') exportedKeys)
+  );
+
+  keysDir = "${cfg.stateDir}/keys";
+
   # App connector duplicate name detection
   hasDuplicateConnectorNames =
     let
@@ -293,7 +318,7 @@ in
     };
 
     authKeys = lib.mkOption {
-      type = lib.types.attrsOf (lib.types.submodule {
+      type = lib.types.attrsOf (lib.types.submodule ({ name, config: keyConfig, ... }: {
         options = {
           description = lib.mkOption {
             type = lib.types.str;
@@ -329,8 +354,61 @@ in
               (expired, revoked, or deleted).
             '';
           };
+
+          exportPath = {
+            enable = lib.mkOption {
+              type = lib.types.bool;
+              default = false;
+              description = ''
+                Write the auth key value to a file on disk after terraform apply.
+                The file is written by Terraform (local_sensitive_file resource)
+                and ownership/permissions are set via ExecStartPost.
+              '';
+            };
+
+            path = lib.mkOption {
+              type = lib.types.path;
+              default = "${cfg.stateDir}/keys/${name}";
+              defaultText = lib.literalExpression ''"''${config.services.tailscale-manager.stateDir}/keys/<name>"'';
+              description = ''
+                Path where the key value is written. Must be writable by the
+                service (add to ReadWritePaths if outside stateDir).
+              '';
+            };
+
+            owner = lib.mkOption {
+              type = lib.types.str;
+              default = "root";
+              description = "Owner of the key file.";
+            };
+
+            group = lib.mkOption {
+              type = lib.types.str;
+              default = "root";
+              description = "Group of the key file.";
+            };
+
+            mode = lib.mkOption {
+              type = lib.types.str;
+              default = "0600";
+              description = "File permissions (octal string, e.g. \"0600\", \"0640\").";
+            };
+          };
+
+          path = lib.mkOption {
+            type = lib.types.nullOr lib.types.path;
+            readOnly = true;
+            default = null;
+            description = ''
+              Resolved export path for this auth key. Null if exportPath.enable = false.
+            '';
+          };
         };
-      });
+
+        config = lib.mkIf keyConfig.exportPath.enable {
+          path = lib.mkDefault keyConfig.exportPath.path;
+        };
+      }));
       default = {};
       description = ''
         Declare multiple auth keys. When non-empty, these replace the
@@ -912,6 +990,15 @@ in
           - Remove appConnectors and manage the app connector nodeAttrs entry manually.
         '';
       }
+      {
+        assertion = !hasExportedKeys || lib.all
+          (keyCfg: builtins.match "0[0-7]{3}" keyCfg.exportPath.mode != null)
+          (lib.attrValues exportedKeys);
+        message = ''
+          services.tailscale-manager.authKeys.<name>.exportPath.mode must be a
+          4-digit octal string (e.g. "0600", "0640") for all exported keys.
+        '';
+      }
     ];
 
     environment.systemPackages = [ cfg.package ];
@@ -963,6 +1050,8 @@ in
         TAILSCALE_MANAGER_ACL_POLICY_PATH = "${cfg.stateDir}/policy.json";
       } // lib.optionalAttrs hasAuthKeys {
         TAILSCALE_MANAGER_AUTH_KEYS_PATH = "${cfg.stateDir}/auth-keys.json";
+      } // lib.optionalAttrs hasExportedKeys {
+        TAILSCALE_MANAGER_AUTH_KEY_EXPORTS = authKeyExportsJSON;
       };
 
       restartIfChanged = true;
@@ -974,8 +1063,10 @@ in
         WorkingDirectory = cfg.stateDir;
         LoadCredential = "tailscale-oauth:${cfg.credentialsFile}";
         ExecStartPre = lib.optional hasPolicyFile (toString policyWriter)
-          ++ lib.optional hasAuthKeys (toString authKeysWriter);
+          ++ lib.optional hasAuthKeys (toString authKeysWriter)
+          ++ lib.optional hasExportedKeys "${pkgs.coreutils}/bin/mkdir -p ${keysDir}";
         ExecStart = "${cfg.package}/bin/tailscale-manager apply";
+        ExecStartPost = lib.optional hasExportedKeys (toString chownScript);
         ReadWritePaths = [ cfg.stateDir ];
         NoNewPrivileges = true;
         PrivateTmp = true;

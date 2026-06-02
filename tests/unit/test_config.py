@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 import pytest
@@ -172,6 +171,64 @@ class TestTagValidator:
     def test_accepts_valid_tags(self) -> None:
         cfg = AppConfig(tailnet="test.ts.net", tags=["tag:server", "tag:ci"], state_dir=Path("/tmp"))
         assert cfg.tags == ["tag:server", "tag:ci"]
+
+
+class TestAuthKeyExports:
+    def test_parsed_from_env(self, monkeypatch) -> None:
+        monkeypatch.setenv(
+            "TAILSCALE_MANAGER_AUTH_KEY_EXPORTS",
+            '{"ci-key": {"path": "/tmp/ci", "owner": "root", "group": "root", "mode": "0600"}}',
+        )
+        config = AppConfig.from_env()
+        assert "ci-key" in config.auth_key_exports
+        assert config.auth_key_exports["ci-key"]["path"] == "/tmp/ci"
+        assert config.auth_key_exports["ci-key"]["owner"] == "root"
+        assert config.auth_key_exports["ci-key"]["mode"] == "0600"
+
+    def test_empty_when_env_not_set(self, monkeypatch) -> None:
+        monkeypatch.delenv("TAILSCALE_MANAGER_AUTH_KEY_EXPORTS", raising=False)
+        config = AppConfig.from_env()
+        assert config.auth_key_exports == {}
+
+    def test_empty_dict_string(self, monkeypatch) -> None:
+        monkeypatch.setenv("TAILSCALE_MANAGER_AUTH_KEY_EXPORTS", "{}")
+        config = AppConfig.from_env()
+        assert config.auth_key_exports == {}
+
+    def test_invalid_json_defaults_to_empty(self, monkeypatch) -> None:
+        monkeypatch.setenv("TAILSCALE_MANAGER_AUTH_KEY_EXPORTS", "not-json")
+        config = AppConfig.from_env()
+        assert config.auth_key_exports == {}
+
+    def test_validates_structure(self) -> None:
+        with pytest.raises(ValidationError):
+            AppConfig(
+                tailnet="test.ts.net",
+                state_dir=Path("/tmp"),
+                auth_key_exports={
+                    "bad-key": {
+                        "path": "/tmp/k",
+                    },
+                },
+            )
+
+    def test_missing_owner_raises(self) -> None:
+        with pytest.raises(ValidationError):
+            AppConfig(
+                tailnet="test.ts.net",
+                state_dir=Path("/tmp"),
+                auth_key_exports={
+                    "k": {
+                        "path": "/tmp/k",
+                        "owner": "root",
+                        "group": "root",
+                    },
+                },
+            )
+
+    def test_default_constructable(self) -> None:
+        config = AppConfig(tailnet="test.ts.net", state_dir=Path("/tmp"))
+        assert config.auth_key_exports == {}
 
 
 class TestFromEnvCoverage:

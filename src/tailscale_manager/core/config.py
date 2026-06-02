@@ -72,6 +72,13 @@ class AppConfig(BaseModel):
             "Set via TAILSCALE_MANAGER_AUTH_KEYS_PATH."
         ),
     )
+    auth_key_exports: dict[str, dict[str, str]] = Field(
+        default_factory=dict,
+        description=(
+            "Map of key name → {path, owner, group, mode} for keys with exportPath.enable = true. "
+            "Auto-populated from TAILSCALE_MANAGER_AUTH_KEY_EXPORTS env var (JSON)."
+        ),
+    )
 
     dns_nameservers: list[str] = Field(
         default_factory=list,
@@ -135,6 +142,20 @@ class AppConfig(BaseModel):
     def validate_tailnet(cls, v: str) -> str:
         if v == "":
             return "-"
+        return v
+
+    @field_validator("auth_key_exports")
+    @classmethod
+    def validate_auth_key_exports(cls, v: dict[str, dict[str, str]]) -> dict[str, dict[str, str]]:
+        required_keys = {"path", "owner", "group", "mode"}
+        for name, entry in v.items():
+            missing = required_keys - set(entry.keys())
+            if missing:
+                raise ValueError(
+                    f"auth_key_exports[{name!r}] is missing required keys: "
+                    f"{', '.join(sorted(missing))}. "
+                    f"Each export must have path, owner, group, and mode."
+                )
         return v
 
     @field_validator("tags")
@@ -286,6 +307,12 @@ class AppConfig(BaseModel):
         )
         auth_keys_path = Path(auth_keys_path_raw) if auth_keys_path_raw else None
 
+        auth_key_exports_raw = os.environ.get("TAILSCALE_MANAGER_AUTH_KEY_EXPORTS", "{}")
+        try:
+            auth_key_exports = json.loads(auth_key_exports_raw)
+        except json.JSONDecodeError:
+            auth_key_exports = {}
+
         return cls(
             tailnet=tailnet,
             state_dir=state_dir,
@@ -300,4 +327,5 @@ class AppConfig(BaseModel):
             acl_format=acl_format,
             acl_policy_path=acl_policy_path,
             auth_keys_path=auth_keys_path,
+            auth_key_exports=auth_key_exports,
         )

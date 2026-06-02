@@ -5,17 +5,18 @@ import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 
+from tailscale_manager.core.acl_backup import backup_acl, restore_acl
 from tailscale_manager.core.config import AppConfig
 from tailscale_manager.core.constants import (
+    ACL_TF_FILE,
     BACKUP_DIR,
-    KEYS_TF_FILE,
     DATA_TF_FILE,
     DNS_TF_FILE,
-    ACL_TF_FILE,
+    KEYS_TF_FILE,
+    LOCAL_PROVIDER_VERSION,
     MAIN_TF_FILE,
     STATE_FILE,
 )
-from tailscale_manager.core.acl_backup import backup_acl, prune_acl_backups, restore_acl
 from tailscale_manager.core.exceptions import TerraformError
 from tailscale_manager.repositories.state_repository import StateRepository
 from tailscale_manager.services.features import (
@@ -24,7 +25,10 @@ from tailscale_manager.services.features import (
     build_dns_config,
     build_keys_config,
 )
-from tailscale_manager.utils.subprocess_helpers import _build_terraform_env, run_terraform
+from tailscale_manager.utils.subprocess_helpers import (
+    _build_terraform_env,
+    run_terraform,
+)
 
 
 class TerraformService:
@@ -43,8 +47,9 @@ class TerraformService:
 
         tags = self.config.tags
         auth_keys = self.config.auth_keys or None
+        auth_key_exports = self.config.auth_key_exports or None
 
-        main_cfg = {
+        main_cfg: dict = {
             "terraform": {
                 "required_providers": {
                     "tailscale": {
@@ -62,7 +67,14 @@ class TerraformService:
             tags=tags,
             recreate_if_invalid=self.config.recreate_if_invalid,
             auth_keys=auth_keys,
+            auth_key_exports=auth_key_exports,
         )
+
+        if auth_key_exports:
+            main_cfg["terraform"]["required_providers"]["local"] = {
+                "source": "hashicorp/local",
+                "version": LOCAL_PROVIDER_VERSION,
+            }
 
         data_cfg = build_devices_config()
 

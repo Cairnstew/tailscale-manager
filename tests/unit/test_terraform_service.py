@@ -259,12 +259,12 @@ def test_keys_tf_uses_auth_keys_when_provided(tmp_path: Path) -> None:
     data = json.loads((tmp_path / "keys.tf.json").read_text())
 
     keys = data["resource"]["tailscale_tailnet_key"]
-    assert "ci-key" in keys
+    assert "ci_key" in keys
     assert "monitoring" in keys
-    assert keys["ci-key"]["description"] == "CI pipeline key"
-    assert keys["ci-key"]["tags"] == ["tag:ci"]
-    assert keys["ci-key"]["ephemeral"] is True
-    assert keys["ci-key"]["preauthorized"] is False
+    assert keys["ci_key"]["description"] == "CI pipeline key"
+    assert keys["ci_key"]["tags"] == ["tag:ci"]
+    assert keys["ci_key"]["ephemeral"] is True
+    assert keys["ci_key"]["preauthorized"] is False
     assert keys["monitoring"]["reusable"] is False
     assert keys["monitoring"]["recreate_if_invalid"] == "never"
 
@@ -304,7 +304,7 @@ def test_keys_tf_sanitizes_resource_names(tmp_path: Path) -> None:
     svc.write_configs()
     data = json.loads((tmp_path / "keys.tf.json").read_text())
     keys = data["resource"]["tailscale_tailnet_key"]
-    assert "my-ci-key" in keys
+    assert "my_ci_key" in keys
     assert "_123start_with_digit" in keys
 
 
@@ -365,3 +365,85 @@ def test_backup_pruning(tmp_path: Path) -> None:
     backup_dir = tmp_path / "backups"
     backups = sorted(backup_dir.glob("*.tfstate"))
     assert len(backups) == 2
+
+
+class TestLocalProvider:
+    def test_adds_local_provider_when_exports_present(self, tmp_path: Path) -> None:
+        config = AppConfig(
+            tailnet="test.ts.net",
+            state_dir=tmp_path,
+            auth_key_exports={
+                "ci-key": {
+                    "path": "/tmp/ci-key",
+                    "owner": "root",
+                    "group": "root",
+                    "mode": "0600",
+                },
+            },
+        )
+        svc = TerraformService(config)
+        svc.write_configs()
+        data = json.loads((tmp_path / "main.tf.json").read_text())
+
+        local = data["terraform"]["required_providers"]["local"]
+        assert local["source"] == "hashicorp/local"
+        assert local["version"] == "~> 2.4"
+
+    def test_no_local_provider_when_no_exports(self, tmp_path: Path) -> None:
+        config = AppConfig(
+            tailnet="test.ts.net",
+            state_dir=tmp_path,
+        )
+        svc = TerraformService(config)
+        svc.write_configs()
+        data = json.loads((tmp_path / "main.tf.json").read_text())
+
+        assert "local" not in data["terraform"]["required_providers"]
+
+    def test_local_provider_version_from_constants(self, tmp_path: Path) -> None:
+        from tailscale_manager.core.constants import LOCAL_PROVIDER_VERSION
+
+        config = AppConfig(
+            tailnet="test.ts.net",
+            state_dir=tmp_path,
+            auth_key_exports={
+                "ci-key": {
+                    "path": "/tmp/ci-key",
+                    "owner": "root",
+                    "group": "root",
+                    "mode": "0600",
+                },
+            },
+        )
+        svc = TerraformService(config)
+        svc.write_configs()
+        data = json.loads((tmp_path / "main.tf.json").read_text())
+
+        assert data["terraform"]["required_providers"]["local"]["version"] == LOCAL_PROVIDER_VERSION
+
+    def test_generates_local_sensitive_file_in_keys_tf(self, tmp_path: Path) -> None:
+        config = AppConfig(
+            tailnet="test.ts.net",
+            state_dir=tmp_path,
+            auth_keys={
+                "ci-key": {
+                    "description": "CI key",
+                    "tags": ["tag:ci"],
+                },
+            },
+            auth_key_exports={
+                "ci-key": {
+                    "path": str(tmp_path / "keys" / "ci-key"),
+                    "owner": "root",
+                    "group": "root",
+                    "mode": "0600",
+                },
+            },
+        )
+        svc = TerraformService(config)
+        svc.write_configs()
+        data = json.loads((tmp_path / "keys.tf.json").read_text())
+
+        lsf = data["resource"]["local_sensitive_file"]
+        assert "key_ci_key" in lsf
+        assert lsf["key_ci_key"]["filename"] == str(tmp_path / "keys" / "ci-key")
