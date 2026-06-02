@@ -114,12 +114,16 @@
         }
       );
 
-      apps = forAllSystems (system: {
-        show-key = {
-          type = "app";
-          program = "${self.packages.${system}.default}/bin/tailscale-manager";
-          args = [ "auth-keys" "show-key" ];
-        };
-      });
+      apps = forAllSystems (system:
+        let pkgs = nixpkgs.legacyPackages.${system}; in
+        {
+          show-key = {
+            type = "app";
+            program = "${pkgs.writeShellScript "show-key" ''
+              exec ${self.packages.${system}.default}/bin/tailscale-manager auth-keys show-key "$@"
+            ''}";
+          };
+        }
+      );
     };
 }
