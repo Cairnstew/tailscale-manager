@@ -397,16 +397,14 @@ in
 
           path = lib.mkOption {
             type = lib.types.nullOr lib.types.path;
-            readOnly = true;
-            default = null;
             description = ''
               Resolved export path for this auth key. Null if exportPath.enable = false.
             '';
           };
         };
 
-        config = lib.mkIf config.exportPath.enable {
-          path = lib.mkDefault config.exportPath.path;
+        config = {
+          path = if config.exportPath.enable then config.exportPath.path else null;
         };
       }));
       default = {};
