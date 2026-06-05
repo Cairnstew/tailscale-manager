@@ -1,0 +1,57 @@
+name: Nix
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        type: string
+        required: true
+      repository:
+        type: string
+        required: true
+  workflow_dispatch:
+
+jobs:
+  nix-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          repository: ${{ inputs.repository }}
+
+      - uses: ./.github/actions/setup-nix
+
+      - run: nix flake check
+
+      - run: nix build .#default
+
+  devshell-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          repository: ${{ inputs.repository }}
+
+      - uses: ./.github/actions/setup-nix
+
+      - name: Build default dev shell
+        run: nix develop .#default --command true
+
+      - name: Build bootstrap dev shell
+        run: nix develop .#bootstrap --command true
+
+      - name: Validate default dev shell tools
+        run: |
+          nix develop .#default --command bash -c '
+            python -c "import tailscale_manager; import typer; import pydantic; import textual; print(\"devshell OK: all imports work\")"
+            pytest --version
+          '
+
+      - name: Validate bootstrap dev shell tools
+        run: |
+          nix develop .#bootstrap --command bash -c '
+            ruff --version
+            mypy --version
+          '

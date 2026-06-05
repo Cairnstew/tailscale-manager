@@ -1,0 +1,29 @@
+name: Security
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        type: string
+        required: true
+      repository:
+        type: string
+        required: true
+  workflow_dispatch:
+
+jobs:
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          repository: ${{ inputs.repository }}
+
+      - uses: ./.github/actions/setup-nix
+
+      - name: pip-audit
+        run: nix develop .#bootstrap --command uv run pip-audit
+
+      - name: bandit
+        run: nix develop .#bootstrap --command uv run bandit -r src/ -ll

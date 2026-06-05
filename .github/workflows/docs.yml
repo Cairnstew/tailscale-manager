@@ -1,0 +1,38 @@
+name: Docs
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        type: string
+        required: true
+      repository:
+        type: string
+        required: true
+  workflow_dispatch:
+
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          repository: ${{ inputs.repository }}
+
+      - name: Check for mkdocs config
+        id: check
+        run: |
+          if [ -f mkdocs.yml ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::warning title=mkdocs.yml not found::No mkdocs.yml found — skipping docs build. Create one to enable docs publishing."
+          fi
+
+      - uses: ./.github/actions/setup-nix
+        if: steps.check.outputs.enabled == 'true'
+
+      - name: Build docs
+        if: steps.check.outputs.enabled == 'true'
+        run: nix develop .#bootstrap --command uv run mkdocs build --strict

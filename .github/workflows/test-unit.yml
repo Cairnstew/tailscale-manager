@@ -1,0 +1,32 @@
+name: Test (Unit)
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        type: string
+        required: true
+      repository:
+        type: string
+        required: true
+  workflow_dispatch:
+
+jobs:
+  test-unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          repository: ${{ inputs.repository }}
+
+      - uses: ./.github/actions/setup-nix
+
+      - name: Run unit tests
+        run: nix develop --command uv run pytest tests/unit --cov --cov-report=xml --cov-report=term
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v5
+        with:
+          files: coverage.xml
+          fail_ci_if_error: false

@@ -1,0 +1,55 @@
+name: Test (Integration)
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        type: string
+        required: true
+      repository:
+        type: string
+        required: true
+  workflow_dispatch:
+
+jobs:
+  test-integration:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          repository: ${{ inputs.repository }}
+
+      - uses: ./.github/actions/setup-nix
+
+      - name: Run integration tests
+        run: nix develop --command uv run pytest tests/integration --cov --cov-report=xml --cov-report=term
+
+      - name: Upload coverage
+        if: always()
+        uses: codecov/codecov-action@v5
+        with:
+          files: coverage.xml
+          fail_ci_if_error: false
+
+  test-e2e:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          repository: ${{ inputs.repository }}
+
+      - uses: ./.github/actions/setup-nix
+
+      - name: Run e2e tests
+        run: nix develop --command uv run pytest tests/e2e --cov --cov-report=xml --cov-report=term
+
+      - name: Upload coverage
+        if: always()
+        uses: codecov/codecov-action@v5
+        with:
+          files: coverage.xml
+          fail_ci_if_error: false

@@ -1,0 +1,32 @@
+name: Lint
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        type: string
+        required: true
+      repository:
+        type: string
+        required: true
+  workflow_dispatch:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          repository: ${{ inputs.repository }}
+
+      - uses: ./.github/actions/setup-nix
+
+      - name: Check formatting
+        run: nix develop .#bootstrap --command uv run ruff format --check src/ tests/
+
+      - name: Lint
+        run: nix develop .#bootstrap --command uv run ruff check src/ tests/
+
+      - name: Type check
+        run: nix develop .#bootstrap --command uv run mypy src/

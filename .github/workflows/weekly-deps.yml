@@ -1,0 +1,42 @@
+name: Weekly Dependency Maintenance
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+jobs:
+  flake-lock:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: DeterminateSystems/update-flake-lock-action@v24
+        with:
+          pr-title: "chore: update flake.lock"
+          pr-labels: |
+            dependencies
+            automated
+          pr-reviewers: ""
+
+  dep-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-nix
+
+      - name: Check for outdated Python dependencies
+        run: |
+          echo "## Python Dependency Audit" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### pip-audit results" >> $GITHUB_STEP_SUMMARY
+          nix develop .#bootstrap --command uv run pip-audit >> $GITHUB_STEP_SUMMARY 2>&1 || true
+
+      - name: Check for outdated Nix inputs
+        run: |
+          echo "### Nix flake input status" >> $GITHUB_STEP_SUMMARY
+          nix flake lock --check 2>&1 || true
