@@ -62,9 +62,15 @@ side for comparison.
 | `src/tailscale_manager/services/` | Core service orchestration (terraform, features, API client) |
 | `src/textual_ui/` | TUI package (Textual) — optional, add as dependency when needed |
 | `tests/` | Test suite |
-| `.github/workflows/ci.yml` | CI — lint, typecheck, test, build on push/PR |
-| `.github/workflows/release.yml` | Release — Nix build + PyPI publish on tag |
-| `.github/workflows/update-flake-lock.yml` | Weekly flake.lock update (Monday) |
+| `.github/workflows/ci.yml` | Orchestrator — detect changes, fan out to reusable workflows |
+| `.github/workflows/lint.yml` | Reusable — ruff format + check + mypy |
+| `.github/workflows/test-unit.yml` | Reusable — pytest unit + coverage |
+| `.github/workflows/test-integration.yml` | Reusable — integration + e2e (soft-fail) |
+| `.github/workflows/nix.yml` | Reusable — flake check + build + devshell smoke test |
+| `.github/workflows/security.yml` | Reusable — pip-audit + bandit |
+| `.github/workflows/docs.yml` | Reusable — mkdocs build (gated) |
+| `.github/workflows/weekly-deps.yml` | Scheduled — flake lock update PR + dep audit |
+| `.github/workflows/release.yml` | Tag v* — Nix build + PyPI publish + GH release |
 | `.github/renovate.json` | Renovate config — batches Python & Nix dep PRs |
 
 ## Workflows
@@ -87,17 +93,25 @@ This builds a Nix-managed venv with all deps. Never use `uv run` inside it — `
 nix build .#default
 ```
 
-### CI workflows
+### CI/CD architecture
 
-The `.github/workflows/` directory has three workflows that run out of the box:
+See `docs/CI.md` for the full reference. High-level summary:
+
+The `.github/workflows/` directory uses a **hub-and-spoke** model:
 
 | Workflow | Trigger | What it does |
 |---|---|---|
-| `ci.yml` | Push to main, PR | Detect project capabilities → lint (ruff) → typecheck (mypy) → test (pytest matrix by tier) → Nix checks (`nix flake check` + `nix build`). Test tiers are auto-detected from existing directories. `unit` is required; `integration` and `e2e` are soft-fail. |
-| `release.yml` | Tag push `v*` | Build via Nix → publish to PyPI (if CLI detected) → create GitHub release. PyPI publishing is gated behind `has_cli`. |
-| `update-flake-lock.yml` | Weekly (Monday) | Runs `nix flake lock --update`, opens a PR. |
+| `ci.yml` | Push to main, PR | **Orchestrator** — `dorny/paths-filter` detects changed paths, fans out to reusable workflows |
+| `lint.yml` | `workflow_call` | ruff format + check + mypy (`.#bootstrap`) |
+| `test-unit.yml` | `workflow_call` | pytest unit + coverage upload (`.#default`) |
+| `test-integration.yml` | `workflow_call` | pytest integration + e2e, soft-fail (`.#default`) |
+| `nix.yml` | `workflow_call` | `nix flake check` + build + devshell smoke tests |
+| `security.yml` | `workflow_call` | pip-audit + bandit (`.#bootstrap`) |
+| `docs.yml` | `workflow_call` | mkdocs build, gated on `mkdocs.yml` (`.#bootstrap`) |
+| `weekly-deps.yml` | Weekly (Mon) | flake.lock update PR + pip-audit + `nix flake lock --check` |
+| `release.yml` | Tag push `v*` | Nix build → PyPI (trusted publishing) → GitHub release |
 
-Lint and typecheck run inside `nix develop .#bootstrap` (fast, no uv2nix venv build). Tests run inside `nix develop` (full hermetic environment). See `TESTS.md` for test tier conventions.
+Lint, security, and docs run inside `nix develop .#bootstrap` (fast, no uv2nix venv build). Tests run inside `nix develop` (full hermetic environment). See `TESTS.md` for test tier conventions.
 
 ## Rules for agents
 

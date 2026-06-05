@@ -294,10 +294,6 @@ See [Tailscale OAuth docs](https://tailscale.com/kb/1215/oauth-clients) for deta
 The `flake-checker-action` (used in setup-nix) phones home to Determinate Systems' telemetry service. This is fine for most projects — worth knowing for audit-sensitive environments.
 
 ### Test tiers are detected by directory presence
-The CI `detect` job checks if `tests/$tier/test_*.py` exists. If you add a new tier directory, it won't be run until you add it to the `for dir in` loop in `ci.yml`.
+The CI orchestrator (`ci.yml`) uses `dorny/paths-filter` to detect changed paths. If you add a new file type or directory that should trigger a specific workflow, update the filters in the `changes` job.
 
-### `nix develop .#bootstrap` vs `nix develop`
-Lint and typecheck use `.#bootstrap` (fast, no uv2nix venv). Tests use `nix develop` (full hermetic environment). If lint/typecheck fail but tests pass, the issue is tool version mismatch between the two shells — check both have the same ruff/mypy version.
-
-### `continue-on-error` for integration/e2e
-`unit` tests are required (hard failure). `integration` and `e2e` use `continue-on-error: true`. If CI is green but integration tests are red, check the workflow run summary — they're reported separately.
+`unit` tests are required (hard failure). Integration and e2e jobs in `test-integration.yml` use `continue-on-error: true`. If CI is green but integration tests are red, check the workflow run summary — they're reported separately.

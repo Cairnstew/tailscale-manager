@@ -58,9 +58,15 @@ Complexity, fragility, and change-frequency ranking for every file in this proje
 | `docs/API.md` | 🟢 Low | API endpoint reference. Updated when new endpoints or scopes are relevant. |
 | `docs/CONCEPTS.md` | 🟢 Low | Terminology reference. Stable — updated only when project scope shifts. |
 | `.github/actions/setup-nix/action.yml` | 🟢 Low | Reusable Nix setup — stable once configured. |
-| `.github/workflows/ci.yml` | 🟡 Medium | CI pipeline — changes when tooling or tier structure changes. Silent failures if workflow YAML is wrong. |
+| `.github/workflows/ci.yml` | 🟡 Medium | Orchestrator — path filter changes, workflow additions/removals. Silent failures if workflow YAML is wrong. |
+| `.github/workflows/lint.yml` | 🟢 Low | Reusable — ruff + mypy, rarely changes. |
+| `.github/workflows/test-unit.yml` | 🟢 Low | Reusable — pytest unit test runner, rarely changes. |
+| `.github/workflows/test-integration.yml` | 🟢 Low | Reusable — integration + e2e test runner, rarely changes. |
+| `.github/workflows/nix.yml` | 🟡 Medium | Nix toolchain changes, devshell smoke test additions. |
+| `.github/workflows/security.yml` | 🟢 Low | pip-audit + bandit, rarely changes. |
+| `.github/workflows/docs.yml` | 🟢 Low | mkdocs build, gated — only matters if mkdocs.yml is added. |
+| `.github/workflows/weekly-deps.yml` | 🟢 Low | Scheduled — flake.lock PR + dep audit, rarely changes. |
 | `.github/workflows/release.yml` | 🟢 Low | Release automation — rarely touched after setup. |
-| `.github/workflows/update-flake-lock.yml` | 🟢 Low | Scheduled — just bumps flake.lock. |
 | `.github/renovate.json` | 🟢 Low | Dependency bot config. Stable once tuned. |
 
 ## Dependency graph
@@ -86,4 +92,4 @@ pyproject.toml ──► uv.lock ──► flake.nix (workspace.mkPyprojectOverl
 3. **`composeManyExtensions` order** — overlays apply left-to-right. `pyproject-build-systems` must come before the uv2nix overlay. This lives in `flake.nix` only.
 
 5. **`nix/module.nix` — `pkgs.tailscale-manager`** — the NixOS module assumes the overlay is installed (or user sets `services.tailscale-manager.package` explicitly). If the package isn't in `pkgs`, the module silently fails.
-6. **`update-flake-lock.yml` + `renovate.json` overlap** — both can update `flake.lock`. Renovate is configured to batch them weekly. `update-flake-lock.yml` is also weekly. If both fire in the same window you get a merge conflict. Mitigation: set Renovate Nix schedule to offset by a few hours, or rely on only one mechanism.
+6. **`weekly-deps.yml` + `renovate.json` overlap** — both can update `flake.lock`. Renovate is configured to batch Nix deps weekly. `weekly-deps.yml` also runs weekly on Monday. If both fire in the same window you get a merge conflict. Mitigation: set Renovate Nix schedule to offset by a few hours, or rely on only one mechanism.

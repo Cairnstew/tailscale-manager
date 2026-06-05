@@ -5,11 +5,17 @@
 ├── .github/                    # CI/CD & dependency management
 │   ├── actions/
 │   │   └── setup-nix/
-│   │       └── action.yml      #   Reusable: Nix installer + cache + uv
+│   │       └── action.yml      #   Composite: Nix installer + cache + uv
 │   ├── workflows/
-│   │   ├── ci.yml              #   Push/PR — lint, typecheck, test, build
-│   │   ├── release.yml         #   Tag v* — Nix build, PyPI publish, GH release
-│   │   └── update-flake-lock.yml # Weekly — nix flake lock update PR
+│   │   ├── ci.yml              #   Orchestrator — detect changes, fan out
+│   │   ├── lint.yml            #   Reusable — ruff + mypy
+│   │   ├── test-unit.yml       #   Reusable — pytest unit + coverage
+│   │   ├── test-integration.yml#   Reusable — integration + e2e (soft-fail)
+│   │   ├── nix.yml             #   Reusable — flake check + build + devshell smoke
+│   │   ├── security.yml        #   Reusable — pip-audit + bandit
+│   │   ├── docs.yml            #   Reusable — mkdocs build (gated)
+│   │   ├── weekly-deps.yml     #   Scheduled — flake.lock PR + dep audit
+│   │   └── release.yml         #   Tag v* — Nix build, PyPI, GH release
 │   └── renovate.json           #   Renovate config — batches Python & Nix dep PRs
 │
 ├── flake.nix                 # Nix flake — thin orchestrator, delegates to nix/
