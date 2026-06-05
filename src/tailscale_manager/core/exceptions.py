@@ -3,6 +3,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 
+__all__ = [
+    "TemplateError",
+    "ConfigurationError",
+    "ServiceError",
+    "NotFoundError",
+    "TerraformError",
+]
+
+
 @dataclass
 class TemplateError(Exception):
     pass

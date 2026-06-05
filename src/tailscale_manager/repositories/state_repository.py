@@ -6,10 +6,12 @@ from pathlib import Path
 
 from tailscale_manager.models.auth_key import TailscaleAuthKey
 from tailscale_manager.models.device import TailscaleDevice
+from tailscale_manager.repositories.base import BaseRepository
 
 
-class StateRepository:
+class StateRepository(BaseRepository):
     def __init__(self, state_dir: Path) -> None:
+        super().__init__(state_dir)
         self.state_file = state_dir / "terraform.tfstate"
         self.last_apply_file = state_dir / "last-apply.json"
 

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from tailscale_manager.utils.subprocess_helpers import _find_hint
+from tailscale_manager.utils.subprocess.terraform import _find_hint
 
 
 class TestFindHint:

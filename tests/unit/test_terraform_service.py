@@ -8,7 +8,7 @@ from pydantic import ValidationError
 
 from tailscale_manager.core.config import AppConfig
 from tailscale_manager.core.exceptions import ConfigurationError
-from tailscale_manager.services.terraform_service import TerraformService
+from tailscale_manager.services.terraform import TerraformService
 
 
 def test_write_configs_produces_multiple_files(tmp_path: Path) -> None:

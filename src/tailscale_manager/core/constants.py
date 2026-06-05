@@ -1,5 +1,23 @@
 from __future__ import annotations
 
+__all__ = [
+    "APP_NAME",
+    "VERSION",
+    "DEFAULT_STATE_DIR",
+    "PROVIDER_VERSION",
+    "LAST_APPLY_FILE",
+    "BACKUP_DIR",
+    "TERRAFORM_DIR",
+    "MAIN_TF_FILE",
+    "KEYS_TF_FILE",
+    "DATA_TF_FILE",
+    "DNS_TF_FILE",
+    "ACL_TF_FILE",
+    "STATE_FILE",
+    "AUTH_KEYS_FILE",
+    "LOCAL_PROVIDER_VERSION",
+]
+
 APP_NAME = "tailscale-manager"
 VERSION = "0.5.2"
 DEFAULT_STATE_DIR = "/var/lib/tailscale-manager"

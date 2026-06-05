@@ -1,121 +1,10 @@
 from __future__ import annotations
 
-import subprocess
-
 from textual.app import App as TextualAppBase
-from textual.app import ComposeResult
-from textual.containers import Horizontal, Vertical
-from textual.screen import Screen
-from textual.widgets import DataTable, Footer, Header, Static, TextArea
 
 from tailscale_manager.core.config import AppConfig
 from tailscale_manager.models.auth_key import TailscaleAuthKey
-from tailscale_manager.models.device import TailscaleDevice
-from tailscale_manager.repositories.state_repository import StateRepository
-from tailscale_manager.services.api_client import fetch_auth_keys
-
-
-def run_status_app(
-    config: AppConfig,
-    keys: list[TailscaleAuthKey],
-    last_apply: dict | None,
-) -> None:
-    app = TailscaleManagerApp(config, keys, last_apply)
-    app.run()
-
-
-class SystemStatus(Static):
-    config: AppConfig
-    last_apply: dict | None
-
-    def __init__(
-        self,
-        config: AppConfig,
-        last_apply: dict | None,
-    ) -> None:
-        super().__init__()
-        self.config = config
-        self.last_apply = last_apply
-
-    def on_mount(self) -> None:
-        self.refresh_content()
-
-    def refresh_content(self) -> None:
-        repo = StateRepository(self.config.state_dir)
-        last = repo.read_last_apply()
-        if last:
-            self.last_apply = last
-
-        lines: list[str] = []
-        lines.append("[bold]System Status[/bold]")
-        lines.append("")
-
-        if self.last_apply:
-            ts = self.last_apply.get("timestamp", "unknown")
-            result = self.last_apply.get("result", "unknown")
-            is_ok = result == "ok"
-            icon = "[green]●[/green]" if is_ok else "[red]●[/red]"
-            ts_str = str(ts)[:19] if not isinstance(ts, str) else ts[:19]
-            lines.append(f"Last apply: {ts_str}")
-            lines.append(f"  Result: {icon} {result}")
-            if result == "ok":
-                add = self.last_apply.get("add_count", 0)
-                chg = self.last_apply.get("change_count", 0)
-                rem = self.last_apply.get("remove_count", 0)
-                lines.append(f"  Changes: +{add} ~{chg} -{rem}")
-            err = self.last_apply.get("error_message")
-            if err:
-                lines.append(f"  [red]Error: {str(err)[:80]}[/red]")
-        else:
-            lines.append("Last apply: [yellow]never[/yellow]")
-
-        lines.append("")
-        state_file = self.config.state_dir / "terraform.tfstate"
-        tf_icon = "[green]●[/green]" if state_file.exists() else "[red]●[/red]"
-        tf_found = "found" if state_file.exists() else "not found"
-        lines.append(f"Terraform state: {tf_icon} {tf_found}")
-
-        backup_dir = self.config.state_dir / "backups"
-        if backup_dir.exists():
-            bcount = len(list(backup_dir.glob("*.tfstate")))
-        else:
-            bcount = 0
-        lines.append(f"Backups: {bcount} retained")
-
-        repo = StateRepository(self.config.state_dir)
-        device_count = len(repo.get_devices())
-        lines.append(f"Devices: {device_count} discovered")
-
-        if not repo.check_state_file_permissions():
-            lines.append("[yellow]⚠ tfstate permissions wider than 0600[/yellow]")
-
-        lines.append("")
-        lines.append(f"State dir: [dim]{self.config.state_dir}[/dim]")
-        lines.append(f"Tailnet: [dim]{self.config.tailnet}[/dim]")
-        self.update("\n".join(lines))
-
-
-class LogViewer(Screen):
-    def compose(self) -> ComposeResult:
-        yield Header()
-        yield TextArea("Loading logs...", read_only=True)
-        yield Footer()
-
-    BINDINGS = [("escape", "dismiss", "Back")]
-
-    def on_mount(self) -> None:
-        try:
-            result = subprocess.run(
-                ["journalctl", "-u", "tailscale-manager.service", "--no-pager", "-n", "30"],
-                capture_output=True,
-                text=True,
-                timeout=10,
-            )
-            content = result.stdout or "No logs found"
-        except (subprocess.TimeoutExpired, FileNotFoundError):
-            content = "Unable to fetch logs"
-        ta = self.query_one(TextArea)
-        ta.text = content
+from textual_ui.screens.main_screen import MainScreen
 
 
 class TailscaleManagerApp(TextualAppBase):
@@ -223,13 +112,13 @@ class TailscaleManagerApp(TextualAppBase):
         height: 1;
     }
 
-    SystemStatus {
+    StatusPanel {
         padding: 1 1;
         background: transparent;
         color: #c8d6e5;
     }
 
-    LogViewer Screen {
+    LogViewerScreen Screen {
         background: #0a0e14;
     }
 
@@ -240,13 +129,6 @@ class TailscaleManagerApp(TextualAppBase):
     }
     """
 
-    BINDINGS = [
-        ("q", "quit", "Quit"),
-        ("r", "refresh", "Refresh"),
-        ("l", "view_logs", "View Logs"),
-        ("d", "toggle_devices", "Toggle Devices"),
-    ]
-
     def __init__(
         self,
         config: AppConfig,
@@ -255,90 +137,20 @@ class TailscaleManagerApp(TextualAppBase):
     ) -> None:
         super().__init__()
         self.app_config = config
-        self.initial_last_apply = last_apply
-        self.devices_visible = True
+        self.keys = keys
+        self.last_apply = last_apply
 
-    def compose(self) -> ComposeResult:
-        yield Header()
-        with Horizontal():
-            with Vertical(classes="left-column", id="left-column"):
-                with Vertical(classes="panel", id="devices-section"):
-                    yield Static("Devices", classes="section-title")
-                    yield DataTable(id="devices-table")
-                with Vertical(classes="panel"):
-                    yield Static("Auth Keys", classes="section-title")
-                    yield DataTable(id="auth-keys-table")
-            with Vertical(classes="right-panel"):
-                yield SystemStatus(self.app_config, self.initial_last_apply)
-        yield Footer()
+    def compose(self) -> None:
+        yield MainScreen(self.app_config, self.keys, self.last_apply)
 
     def on_mount(self) -> None:
         self.title = f"Tailscale Manager — {self.app_config.tailnet}"
-        self._refresh_auth_keys()
-        self._populate_devices()
-        self.set_interval(30, self.action_refresh)
 
-    def _refresh_auth_keys(self) -> None:
-        try:
-            keys = fetch_auth_keys(
-                client_id=self.app_config.oauth_client_id,
-                client_secret=self.app_config.oauth_client_secret,
-            )
-        except Exception:
-            repo = StateRepository(self.app_config.state_dir)
-            keys = repo.get_managed_keys()
-        self._populate_auth_keys(keys)
 
-    def _populate_auth_keys(self, keys: list[TailscaleAuthKey]) -> None:
-        table = self.query_one("#auth-keys-table", DataTable)
-        table.clear(columns=True)
-        table.add_columns("ID", "Description", "Tags", "Expiry", "Status")
-        for k in keys:
-            status = "[green]●[/green]" if not k.revoked else "[red]●[/red]"
-            expiry = k.expiry.strftime("%Y-%m-%d") if k.expiry else "-"
-            tags = ", ".join(k.tags) if k.tags else "-"
-            table.add_row(
-                k.id[:16] if k.id else "-",
-                k.description or "-",
-                tags,
-                expiry,
-                status,
-            )
-        if not keys:
-            table.add_row("(no auth keys managed)", "", "", "", "")
-
-    def _populate_devices(self) -> None:
-        table = self.query_one("#devices-table", DataTable)
-        table.clear(columns=True)
-        table.add_columns("Name", "Hostname", "Addresses", "Tags", "User")
-        repo = StateRepository(self.app_config.state_dir)
-        devices = repo.get_devices()
-        for d in devices:
-            addrs = ", ".join(d.addresses[:3]) if d.addresses else "-"
-            tags = ", ".join(d.tags[:3]) if d.tags else "-"
-            table.add_row(
-                d.name or "-",
-                d.hostname or "-",
-                addrs,
-                tags,
-                d.user or "-",
-            )
-        if not devices:
-            table.add_row("(run apply to discover devices)", "", "", "", "")
-
-    def action_refresh(self) -> None:
-        self._refresh_auth_keys()
-        self._populate_devices()
-        sys_panel = self.query_one(SystemStatus)
-        sys_panel.refresh_content()
-
-    def action_view_logs(self) -> None:
-        self.push_screen(LogViewer())
-
-    def action_toggle_devices(self) -> None:
-        section = self.query_one("#devices-section", Vertical)
-        self.devices_visible = not self.devices_visible
-        if self.devices_visible:
-            section.remove_class("hidden")
-        else:
-            section.add_class("hidden")
+def run_status_app(
+    config: AppConfig,
+    keys: list[TailscaleAuthKey],
+    last_apply: dict | None,
+) -> None:
+    app = TailscaleManagerApp(config, keys, last_apply)
+    app.run()
