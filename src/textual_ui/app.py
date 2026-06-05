@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from textual.app import App as TextualAppBase
+from textual.app import App as TextualAppBase, ComposeResult
 
 from tailscale_manager.core.config import AppConfig
 from tailscale_manager.models.auth_key import TailscaleAuthKey
@@ -140,7 +140,7 @@ class TailscaleManagerApp(TextualAppBase):
         self.keys = keys
         self.last_apply = last_apply
 
-    def compose(self) -> None:
+    def compose(self) -> ComposeResult:
         yield MainScreen(self.app_config, self.keys, self.last_apply)
 
     def on_mount(self) -> None:

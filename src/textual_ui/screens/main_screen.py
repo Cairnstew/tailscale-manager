@@ -66,14 +66,20 @@ class MainScreen(Screen):
             )
             keys = client.fetch_auth_keys()
         except Exception:
-            repo = StateRepository(self.app_config.state_dir)
-            keys = repo.get_managed_keys()
+            try:
+                repo = StateRepository(self.app_config.state_dir)
+                keys = repo.get_managed_keys()
+            except Exception:
+                keys = []
         table = self.query_one(AuthKeysTable)
         table.load_keys(keys)
 
     def _populate_devices(self) -> None:
-        repo = StateRepository(self.app_config.state_dir)
-        devices = repo.get_devices()
+        try:
+            repo = StateRepository(self.app_config.state_dir)
+            devices = repo.get_devices()
+        except Exception:
+            devices = []
         table = self.query_one(DevicesTable)
         table.load_devices(devices)
 

@@ -88,11 +88,15 @@ def register(parent: typer.Typer) -> None:
             if k.tags:
                 print(f"     tags: {', '.join(k.tags)}")
 
+        if not sys.stdout.isatty():
+            return
+
         try:
             from textual_ui import run_status_app
             run_status_app(config, keys, last)
-        except ImportError:
-            pass
+        except ImportError as exc:
+            _error_console.print(f"TUI not available: {exc}")
+            _error_console.print("Install textual: pip install textual")
         except Exception as exc:
             print(f"TUI unavailable: {exc}", file=sys.stderr)
 
