@@ -317,6 +317,18 @@ in
       description = "Tailscale Terraform provider version constraint.";
     };
 
+    stateBackend = lib.mkOption {
+      type = lib.types.nullOr (lib.types.attrsOf lib.types.anything);
+      default = null;
+      description = ''
+        Optional Terraform backend configuration. When set, the value is placed
+        verbatim under the "backend" key in the "terraform" block of main.tf.json.
+        Example for S3:
+          stateBackend = { s3 = { bucket = "my-tfstate"; key = "tailscale/terraform.tfstate"; region = "us-east-1"; }; };
+        When null (default), local state at stateDir/terraform.tfstate is used.
+      '';
+    };
+
     authKeys = lib.mkOption {
       type = lib.types.attrsOf (lib.types.submodule ({ name, config, ... }: {
         options = {
@@ -997,6 +1009,15 @@ in
           4-digit octal string (e.g. "0600", "0640") for all exported keys.
         '';
       }
+      {
+        assertion = cfg.stateBackend == null || !(builtins.pathExists "${cfg.stateDir}/terraform.tfstate");
+        message = ''
+          services.tailscale-manager.stateBackend is set but a local
+          terraform.tfstate already exists at ${cfg.stateDir}/terraform.tfstate.
+          Run `terraform state push` to migrate state, then remove the local file,
+          or unset stateBackend.
+        '';
+      }
     ];
 
     environment.systemPackages = [ cfg.package ];
@@ -1050,6 +1071,8 @@ in
         TAILSCALE_MANAGER_AUTH_KEYS_PATH = "${cfg.stateDir}/auth-keys.json";
       } // lib.optionalAttrs hasExportedKeys {
         TAILSCALE_MANAGER_AUTH_KEY_EXPORTS = authKeyExportsJSON;
+      } // lib.optionalAttrs (cfg.stateBackend != null) {
+        TAILSCALE_MANAGER_STATE_BACKEND = builtins.toJSON cfg.stateBackend;
       };
 
       restartIfChanged = true;

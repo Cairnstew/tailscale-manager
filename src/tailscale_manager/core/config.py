@@ -57,6 +57,15 @@ class AppConfig(BaseModel):
         ),
     )
 
+    state_backend: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "Optional Terraform backend configuration. "
+            "Loaded from TAILSCALE_MANAGER_STATE_BACKEND env var (JSON string). "
+            "When set, placed verbatim under the 'backend' key in the terraform block."
+        ),
+    )
+
     auth_keys: dict[str, Any] = Field(
         default_factory=dict,
         description=(
@@ -282,6 +291,14 @@ class AppConfig(BaseModel):
             "TAILSCALE_MANAGER_PROVIDER_VERSION", "~> 0.29"
         )
 
+        state_backend_raw = os.environ.get("TAILSCALE_MANAGER_STATE_BACKEND", "")
+        state_backend: dict[str, Any] | None = None
+        if state_backend_raw:
+            try:
+                state_backend = json.loads(state_backend_raw)
+            except json.JSONDecodeError:
+                state_backend = None
+
         dns_nameservers_raw = os.environ.get("TAILSCALE_MANAGER_DNS_NAMESERVERS", "")
         dns_nameservers = [s.strip() for s in dns_nameservers_raw.split(",") if s.strip()]
 
@@ -321,6 +338,7 @@ class AppConfig(BaseModel):
             tags=tags,
             recreate_if_invalid=recreate_if_invalid,
             provider_version=provider_version,
+            state_backend=state_backend,
             dns_nameservers=dns_nameservers,
             dns_magic_dns=dns_magic_dns,
             acl_enable=acl_enable,

@@ -17,7 +17,7 @@ from tailscale_manager.core.constants import (
     MAIN_TF_FILE,
     STATE_FILE,
 )
-from tailscale_manager.core.exceptions import TerraformError
+from tailscale_manager.core.exceptions import ConfigurationError, TerraformError
 from tailscale_manager.repositories.state_repository import StateRepository
 from tailscale_manager.services.features import (
     build_acl_config,
@@ -44,6 +44,18 @@ class TerraformService:
     def write_configs(self) -> bool:
         """Write all .tf.json files with restricted permissions. Returns True if any file was written/changed."""
         self.config.state_dir.mkdir(parents=True, exist_ok=True)
+
+        if self.config.state_backend is not None:
+            local_state = self.config.state_dir / STATE_FILE
+            if local_state.exists():
+                raise ConfigurationError(
+                    message=(
+                        f"local terraform.tfstate exists at {local_state} but a remote backend is configured. "
+                        f"Run `terraform state push` to migrate state, then remove the local file, or unset stateBackend."
+                    ),
+                    field="TAILSCALE_MANAGER_STATE_BACKEND",
+                    hint="Remove the local tfstate file or unset the backend configuration",
+                )
 
         tags = self.config.tags
         auth_keys = self.config.auth_keys or None
@@ -75,6 +87,9 @@ class TerraformService:
                 "source": "hashicorp/local",
                 "version": LOCAL_PROVIDER_VERSION,
             }
+
+        if self.config.state_backend is not None:
+            main_cfg["terraform"]["backend"] = self.config.state_backend
 
         data_cfg = build_devices_config()
 

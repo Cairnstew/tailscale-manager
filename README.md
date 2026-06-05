@@ -159,6 +159,7 @@ All options under `services.tailscale-manager`.
 | `enableTimer` | `bool` | `false` | Enable a daily systemd timer to automatically re-run apply |
 | `recreateIfInvalid` | `enum` | `"always"` | Whether to recreate the key if invalid (`"always"` or `"never"`) |
 | `providerVersion` | `string` | `"~> 0.29"` | Tailscale Terraform provider version constraint |
+| `stateBackend` | `null or attrs` | `null` | Optional Terraform backend config. When set, placed verbatim in main.tf.json's `terraform.backend` block. |
 | `dns.nameservers` | `list of strings` | `[]` | Global DNS nameserver IPs |
 | `dns.magicDns` | `bool` | `false` | Enable MagicDNS |
 | `dns.splitNameservers` | `attrs of list of strings` | `{}` | Per-domain split DNS (domain → nameserver IPs) |
@@ -304,6 +305,8 @@ tailscale-manager status         # read-only TUI dashboard
 tailscale-manager status --json  # JSON for scripting
 tailscale-manager devices        # list discovered devices from tfstate
 tailscale-manager devices --json # JSON device list for scripting
+tailscale-manager output              # print managed key secret to stdout
+tailscale-manager output --output-file /run/secrets/ts-key  # write to file (mode 0600)
 tailscale-manager backup-state   # manual tfstate backup
 tailscale-manager restore-state  # manual tfstate restore
 tailscale-manager version        # show version
@@ -322,6 +325,7 @@ tailscale-manager version        # show version
 | `TAILSCALE_MANAGER_TAGS` | — | `""` | Comma-separated tags, e.g. `tag:ci,tag:infra` |
 | `TAILSCALE_MANAGER_RECREATE_IF_INVALID` | — | `"always"` | Key rotation policy (`"always"` or `"never"`) |
 | `TAILSCALE_MANAGER_PROVIDER_VERSION` | — | `"~> 0.29"` | Tailscale Terraform provider version constraint |
+| `TAILSCALE_MANAGER_STATE_BACKEND` | — | `""` | JSON string with Terraform backend config (e.g. `{"s3":{"bucket":"my-tfstate","key":"tfstate","region":"us-east-1"}}`) |
 | `TAILSCALE_MANAGER_DNS_NAMESERVERS` | — | `""` | Comma-separated DNS nameserver IPs |
 | `TAILSCALE_MANAGER_DNS_MAGIC_DNS` | — | `false` | Enable MagicDNS |
 | `TAILSCALE_MANAGER_ACL_ENABLE` | — | `false` | Enable ACL management |

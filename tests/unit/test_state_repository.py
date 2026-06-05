@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from tailscale_manager.repositories.state_repository import StateRepository
 
 
@@ -233,3 +235,63 @@ def test_write_and_read_last_apply(tmp_path: Path) -> None:
     assert result is not None
     assert result["result"] == "ok"
     assert result["timestamp"] == "2024-01-01T00:00:00"
+
+
+def test_get_managed_key_value_returns_key(tmp_path: Path) -> None:
+    state_file = tmp_path / "terraform.tfstate"
+    state_file.write_text("""
+    {
+      "version": 1,
+      "resources": [
+        {
+          "type": "tailscale_tailnet_key",
+          "name": "managed_key",
+          "instances": [
+            {
+              "attributes": {
+                "id": "k123",
+                "key": "tskey-auth-k123-abc"
+              }
+            }
+          ]
+        }
+      ]
+    }
+    """)
+    repo = StateRepository(tmp_path)
+    val = repo.get_managed_key_value()
+    assert val == "tskey-auth-k123-abc"
+
+
+def test_get_managed_key_value_no_state_returns_none(tmp_path: Path) -> None:
+    repo = StateRepository(tmp_path)
+    assert repo.get_managed_key_value() is None
+
+
+def test_get_managed_key_value_no_resource_returns_none(tmp_path: Path) -> None:
+    state_file = tmp_path / "terraform.tfstate"
+    state_file.write_text('{"version": 1, "resources": []}')
+    repo = StateRepository(tmp_path)
+    assert repo.get_managed_key_value() is None
+
+
+def test_get_managed_key_value_multiple_instances_raises(tmp_path: Path) -> None:
+    state_file = tmp_path / "terraform.tfstate"
+    state_file.write_text("""
+    {
+      "version": 1,
+      "resources": [
+        {
+          "type": "tailscale_tailnet_key",
+          "name": "managed_key",
+          "instances": [
+            {"attributes": {"id": "k1", "key": "key-one"}},
+            {"attributes": {"id": "k2", "key": "key-two"}}
+          ]
+        }
+      ]
+    }
+    """)
+    repo = StateRepository(tmp_path)
+    with pytest.raises(ValueError, match="expected 1 instance"):
+        repo.get_managed_key_value()

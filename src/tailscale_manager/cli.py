@@ -313,6 +313,46 @@ def devices(
 
 
 @app.command()
+def output(
+    output_file: str | None = typer.Option(
+        None,
+        "--output-file",
+        help="Write key to file (mode 0600) instead of stdout",
+    ),
+) -> None:
+    """Print the managed auth key secret from Terraform state."""
+    config = _load_config()
+    repo = StateRepository(config.state_dir)
+
+    state_file = config.state_dir / "terraform.tfstate"
+    if not state_file.exists():
+        _error_console.print(f"Error: no Terraform state found at {state_file}")
+        raise typer.Exit(1)
+
+    try:
+        key = repo.get_managed_key_value()
+    except ValueError as exc:
+        _error_console.print(f"Error: {exc}")
+        raise typer.Exit(1) from exc
+    if key is None:
+        _error_console.print("Error: managed key not found in state")
+        raise typer.Exit(1)
+
+    if output_file:
+        try:
+            path = Path(output_file)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            fd = os.open(str(path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(fd, "w") as f:
+                f.write(key)
+        except OSError as exc:
+            _error_console.print(f"Error: cannot write to {output_file}: {exc}")
+            raise typer.Exit(1) from exc
+    else:
+        sys.stdout.write(key)
+
+
+@app.command()
 def backup_state() -> None:
     config = _load_config()
     svc = TerraformService(config)

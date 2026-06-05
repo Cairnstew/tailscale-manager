@@ -45,6 +45,26 @@ class StateRepository:
                 )
         return None
 
+    def get_managed_key_value(self) -> str | None:
+        """Extract the raw key secret from the 'managed_key' resource in tfstate."""
+        state = self.read_state()
+        if state is None:
+            return None
+        for res in state.get("resources", []):
+            if res.get("type") == "tailscale_tailnet_key" and res.get("name") == "managed_key":
+                instances = res.get("instances", [])
+                if len(instances) > 1:
+                    raise ValueError(
+                        f"expected 1 instance for tailscale_tailnet_key.managed_key, "
+                        f"found {len(instances)}"
+                    )
+                for instance in instances:
+                    attrs = instance.get("attributes", {})
+                    key = attrs.get("key")
+                    if key:
+                        return key
+        return None
+
     def get_managed_keys(self) -> list[TailscaleAuthKey]:
         state = self.read_state()
         if state is None:

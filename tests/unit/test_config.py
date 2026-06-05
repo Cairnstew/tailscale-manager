@@ -231,6 +231,37 @@ class TestAuthKeyExports:
         assert config.auth_key_exports == {}
 
 
+class TestStateBackend:
+    def test_parsed_from_env(self, monkeypatch) -> None:
+        monkeypatch.setenv(
+            "TAILSCALE_MANAGER_STATE_BACKEND",
+            '{"s3": {"bucket": "my-tfstate", "key": "tailscale/terraform.tfstate", "region": "us-east-1"}}',
+        )
+        config = AppConfig.from_env()
+        assert config.state_backend is not None
+        assert config.state_backend["s3"]["bucket"] == "my-tfstate"
+        assert config.state_backend["s3"]["region"] == "us-east-1"
+
+    def test_none_when_env_not_set(self, monkeypatch) -> None:
+        monkeypatch.delenv("TAILSCALE_MANAGER_STATE_BACKEND", raising=False)
+        config = AppConfig.from_env()
+        assert config.state_backend is None
+
+    def test_none_when_empty_string(self, monkeypatch) -> None:
+        monkeypatch.setenv("TAILSCALE_MANAGER_STATE_BACKEND", "")
+        config = AppConfig.from_env()
+        assert config.state_backend is None
+
+    def test_none_when_invalid_json(self, monkeypatch) -> None:
+        monkeypatch.setenv("TAILSCALE_MANAGER_STATE_BACKEND", "not-json")
+        config = AppConfig.from_env()
+        assert config.state_backend is None
+
+    def test_default_constructable(self) -> None:
+        config = AppConfig(tailnet="test.ts.net", state_dir=Path("/tmp"))
+        assert config.state_backend is None
+
+
 class TestFromEnvCoverage:
     def test_from_env_sets_all_fields(self, monkeypatch) -> None:
         monkeypatch.setenv("TAILSCALE_TAILNET", "t.ts.net")
@@ -244,6 +275,10 @@ class TestFromEnvCoverage:
         monkeypatch.setenv("TAILSCALE_MANAGER_DNS_MAGIC_DNS", "true")
         monkeypatch.setenv("TAILSCALE_MANAGER_ACL_ENABLE", "true")
         monkeypatch.setenv("TAILSCALE_MANAGER_ACL_FORMAT", "json")
+        monkeypatch.setenv(
+            "TAILSCALE_MANAGER_STATE_BACKEND",
+            '{"s3": {"bucket": "my-tfstate", "key": "tfstate", "region": "us-east-1"}}',
+        )
 
         config = AppConfig.from_env()
         assert config.tailnet == "t.ts.net"
@@ -255,6 +290,8 @@ class TestFromEnvCoverage:
         assert config.provider_version == "~> 1.0"
         assert config.dns_nameservers == ["1.1.1.1", "8.8.8.8"]
         assert config.dns_magic_dns is True
+        assert config.state_backend is not None
+        assert config.state_backend["s3"]["bucket"] == "my-tfstate"
         assert config.acl_enable is True
         assert config.acl_format == "json"
 
@@ -269,6 +306,7 @@ class TestFromEnvCoverage:
         monkeypatch.delenv("TAILSCALE_MANAGER_DNS_MAGIC_DNS", raising=False)
         monkeypatch.delenv("TAILSCALE_MANAGER_ACL_ENABLE", raising=False)
         monkeypatch.delenv("TAILSCALE_MANAGER_ACL_FORMAT", raising=False)
+        monkeypatch.delenv("TAILSCALE_MANAGER_STATE_BACKEND", raising=False)
         monkeypatch.delenv("TAILSCALE_TAILNET", raising=False)
         monkeypatch.delenv("TAILSCALE_OAUTH_CLIENT_ID", raising=False)
         monkeypatch.delenv("TAILSCALE_OAUTH_CLIENT_SECRET", raising=False)
@@ -283,3 +321,4 @@ class TestFromEnvCoverage:
         assert config.dns_magic_dns is False
         assert config.acl_enable is False
         assert config.acl_format == "hujson"
+        assert config.state_backend is None

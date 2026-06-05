@@ -7,6 +7,7 @@ import pytest
 from pydantic import ValidationError
 
 from tailscale_manager.core.config import AppConfig
+from tailscale_manager.core.exceptions import ConfigurationError
 from tailscale_manager.services.terraform_service import TerraformService
 
 
@@ -447,3 +448,55 @@ class TestLocalProvider:
         lsf = data["resource"]["local_sensitive_file"]
         assert "key_ci_key" in lsf
         assert lsf["key_ci_key"]["filename"] == str(tmp_path / "keys" / "ci-key")
+
+
+class TestStateBackend:
+    def test_main_tf_includes_backend_when_configured(self, tmp_path: Path) -> None:
+        config = AppConfig(
+            tailnet="test.ts.net",
+            state_dir=tmp_path,
+            state_backend={
+                "s3": {
+                    "bucket": "my-tfstate",
+                    "key": "tailscale/terraform.tfstate",
+                    "region": "us-east-1",
+                },
+            },
+        )
+        svc = TerraformService(config)
+        svc.write_configs()
+        data = json.loads((tmp_path / "main.tf.json").read_text())
+
+        assert "backend" in data["terraform"]
+        assert data["terraform"]["backend"]["s3"]["bucket"] == "my-tfstate"
+        assert data["terraform"]["backend"]["s3"]["region"] == "us-east-1"
+
+    def test_main_tf_no_backend_when_not_configured(self, tmp_path: Path) -> None:
+        config = AppConfig(
+            tailnet="test.ts.net",
+            state_dir=tmp_path,
+        )
+        svc = TerraformService(config)
+        svc.write_configs()
+        data = json.loads((tmp_path / "main.tf.json").read_text())
+
+        assert "backend" not in data["terraform"]
+
+    def test_errors_when_backend_and_local_state_exist(self, tmp_path: Path) -> None:
+        state_file = tmp_path / "terraform.tfstate"
+        state_file.write_text('{"version": 1}')
+
+        config = AppConfig(
+            tailnet="test.ts.net",
+            state_dir=tmp_path,
+            state_backend={
+                "s3": {
+                    "bucket": "my-tfstate",
+                    "key": "tailscale/terraform.tfstate",
+                    "region": "us-east-1",
+                },
+            },
+        )
+        svc = TerraformService(config)
+        with pytest.raises(ConfigurationError, match="local terraform.tfstate exists"):
+            svc.write_configs()

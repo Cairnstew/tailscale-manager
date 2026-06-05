@@ -329,3 +329,128 @@ class TestFirstRunGuidance:
         (tmp_path / ".terraform").mkdir()
         result = runner.invoke(app, ["init"])
         assert "First run detected" not in result.stdout
+
+
+# ── Output command tests ──────────────────────────────────────
+
+
+class TestOutput:
+    def test_output_prints_key_to_stdout(self, tmp_path, monkeypatch) -> None:
+        monkeypatch.setenv("TAILSCALE_MANAGER_STATE_DIR", str(tmp_path))
+        tfstate = tmp_path / "terraform.tfstate"
+        tfstate.write_text(json.dumps({
+            "resources": [{
+                "mode": "managed",
+                "type": "tailscale_tailnet_key",
+                "name": "managed_key",
+                "instances": [{
+                    "attributes": {
+                        "id": "k123",
+                        "key": "tskey-auth-k123-abc",
+                    }
+                }]
+            }]
+        }))
+        result = runner.invoke(app, ["output"])
+        assert result.exit_code == 0
+        assert result.stdout == "tskey-auth-k123-abc"
+        assert "tskey-auth-k123-abc" not in result.stderr
+
+    def test_output_no_state_file(self, tmp_path, monkeypatch) -> None:
+        monkeypatch.setenv("TAILSCALE_MANAGER_STATE_DIR", str(tmp_path))
+        result = runner.invoke(app, ["output"])
+        assert result.exit_code == 1
+        assert "no Terraform state found" in result.stderr
+
+    def test_output_key_not_found(self, tmp_path, monkeypatch) -> None:
+        monkeypatch.setenv("TAILSCALE_MANAGER_STATE_DIR", str(tmp_path))
+        tfstate = tmp_path / "terraform.tfstate"
+        tfstate.write_text(json.dumps({"resources": []}))
+        result = runner.invoke(app, ["output"])
+        assert result.exit_code == 1
+        assert "managed key not found" in result.stderr
+
+    def test_output_key_is_none_in_state(self, tmp_path, monkeypatch) -> None:
+        monkeypatch.setenv("TAILSCALE_MANAGER_STATE_DIR", str(tmp_path))
+        tfstate = tmp_path / "terraform.tfstate"
+        tfstate.write_text(json.dumps({
+            "resources": [{
+                "mode": "managed",
+                "type": "tailscale_tailnet_key",
+                "name": "managed_key",
+                "instances": [{
+                    "attributes": {
+                        "id": "k123",
+                        "key": None,
+                    }
+                }]
+            }]
+        }))
+        result = runner.invoke(app, ["output"])
+        assert result.exit_code == 1
+        assert "managed key not found" in result.stderr
+
+    def test_output_writes_file_with_mode_0600(self, tmp_path, monkeypatch) -> None:
+        monkeypatch.setenv("TAILSCALE_MANAGER_STATE_DIR", str(tmp_path))
+        tfstate = tmp_path / "terraform.tfstate"
+        tfstate.write_text(json.dumps({
+            "resources": [{
+                "mode": "managed",
+                "type": "tailscale_tailnet_key",
+                "name": "managed_key",
+                "instances": [{
+                    "attributes": {
+                        "id": "k123",
+                        "key": "tskey-auth-k123-abc",
+                    }
+                }]
+            }]
+        }))
+        out_path = tmp_path / "out" / "ts-key"
+        result = runner.invoke(app, ["output", "--output-file", str(out_path)])
+        assert result.exit_code == 0
+        assert result.stdout == ""
+        assert out_path.read_text() == "tskey-auth-k123-abc"
+        assert oct(out_path.stat().st_mode & 0o777) == "0o600"
+
+    def test_output_multiple_instances_errors(self, tmp_path, monkeypatch) -> None:
+        monkeypatch.setenv("TAILSCALE_MANAGER_STATE_DIR", str(tmp_path))
+        tfstate = tmp_path / "terraform.tfstate"
+        tfstate.write_text(json.dumps({
+            "resources": [{
+                "mode": "managed",
+                "type": "tailscale_tailnet_key",
+                "name": "managed_key",
+                "instances": [
+                    {"attributes": {"id": "k1", "key": "key-one"}},
+                    {"attributes": {"id": "k2", "key": "key-two"}},
+                ],
+            }]
+        }))
+        result = runner.invoke(app, ["output"])
+        assert result.exit_code == 1
+        assert "expected 1 instance" in result.stderr
+
+    def test_output_file_unwritable_path(self, tmp_path, monkeypatch) -> None:
+        monkeypatch.setenv("TAILSCALE_MANAGER_STATE_DIR", str(tmp_path))
+        tfstate = tmp_path / "terraform.tfstate"
+        tfstate.write_text(json.dumps({
+            "resources": [{
+                "mode": "managed",
+                "type": "tailscale_tailnet_key",
+                "name": "managed_key",
+                "instances": [{
+                    "attributes": {
+                        "id": "k123",
+                        "key": "tskey-auth-k123-abc",
+                    }
+                }]
+            }]
+        }))
+        # Create a file and try to use it as a directory — should fail
+        file_path = tmp_path / "file"
+        file_path.write_text("")
+        bad_path = file_path / "nested" / "key"
+        result = runner.invoke(app, ["output", "--output-file", str(bad_path)])
+        assert result.exit_code == 1
+        assert "cannot write" in result.stderr
