@@ -92,7 +92,7 @@ def register(parent: typer.Typer) -> None:
             return
 
         try:
-            from textual_ui import run_status_app
+            from tailscale_manager.tui import run_status_app
             run_status_app(config, keys, last)
         except ImportError as exc:
             _error_console.print(f"TUI not available: {exc}")
