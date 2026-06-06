@@ -329,6 +329,38 @@ in
       '';
     };
 
+    agenixIntegration = {
+      enable = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = ''
+          After a successful terraform apply, extract the generated Tailscale
+          auth key from tfstate and push it into agenix-manager as an encrypted
+          secret. Requires agenix-manager to be installed and its secrets
+          directory to be initialised.
+        '';
+      };
+
+      secretName = lib.mkOption {
+        type = lib.types.str;
+        default = "tailscale-auth-key";
+        description = "Name of the agenix secret to create or overwrite.";
+      };
+
+      secretScope = lib.mkOption {
+        type = lib.types.str;
+        default = "systems";
+        description = "Key scope passed to agenix-manager new --scope.";
+      };
+
+      agenixManagerBin = lib.mkOption {
+        type = lib.types.path;
+        description = "Path to the agenix-manager binary.";
+        example = lib.literalExpression
+          ''"${pkgs.agenix-manager}/bin/agenix-manager"'';
+      };
+    };
+
     authKeys = lib.mkOption {
       type = lib.types.attrsOf (lib.types.submodule ({ name, config, ... }: {
         options = {
@@ -1073,6 +1105,11 @@ in
         TAILSCALE_MANAGER_AUTH_KEY_EXPORTS = authKeyExportsJSON;
       } // lib.optionalAttrs (cfg.stateBackend != null) {
         TAILSCALE_MANAGER_STATE_BACKEND = builtins.toJSON cfg.stateBackend;
+      } // lib.optionalAttrs cfg.agenixIntegration.enable {
+        TAILSCALE_MANAGER_AGENIX_ENABLE        = "1";
+        TAILSCALE_MANAGER_AGENIX_SECRET_NAME   = cfg.agenixIntegration.secretName;
+        TAILSCALE_MANAGER_AGENIX_SECRET_SCOPE  = cfg.agenixIntegration.secretScope;
+        TAILSCALE_MANAGER_AGENIX_BIN           = cfg.agenixIntegration.agenixManagerBin;
       };
 
       restartIfChanged = true;

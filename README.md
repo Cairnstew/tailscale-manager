@@ -290,6 +290,50 @@ services.tailscale-manager = {
 };
 ```
 
+### With agenix-manager (automatic key sync)
+
+If you use [`agenix-manager`](https://github.com/Cairnstew/agenix-manager)
+to manage your encrypted secrets, `tailscale-manager` can automatically push
+the generated Tailscale auth key into agenix after every successful apply.
+
+```nix
+# flake.nix
+inputs = {
+  tailscale-manager.url = "github:Cairnstew/tailscale-manager";
+  agenix-manager.url    = "github:Cairnstew/agenix-manager";
+};
+```
+
+```nix
+# configuration.nix
+{ config, inputs, system, ... }: {
+  services.tailscale-manager = {
+    enable          = true;
+    credentialsFile = config.age.secrets.tailscale-oauth.path;
+    tags            = [ "tag:ci" ];
+
+    agenixIntegration = {
+      enable          = true;
+      secretName      = "tailscale-auth-key";
+      secretScope     = "systems";
+      agenixManagerBin =
+        "${inputs.agenix-manager.packages.${system}.default}/bin/agenix-manager";
+    };
+  };
+
+  # Consume the key in another module:
+  services.tailscale = {
+    enable      = true;
+    authKeyFile = config.age.secrets.tailscale-auth-key.path;
+  };
+}
+```
+
+After the first `nixos-rebuild switch`, `secrets/tailscale-auth-key.age`
+is created and the manifest is updated automatically. Commit the updated
+`secrets/` directory to version control. On key rotation, the hook
+re-runs with `--overwrite`, replacing the encrypted file in-place.
+
 ---
 
 ## CLI reference

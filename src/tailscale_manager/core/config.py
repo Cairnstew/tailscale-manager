@@ -89,6 +89,36 @@ class AppConfig(BaseModel):
         ),
     )
 
+    agenix_integration_enabled: bool = Field(
+        default=False,
+        description=(
+            "After a successful terraform apply, extract the generated Tailscale "
+            "auth key from tfstate and push it into agenix-manager as an encrypted "
+            "secret. Set via TAILSCALE_MANAGER_AGENIX_ENABLE."
+        ),
+    )
+    agenix_secret_name: str = Field(
+        default="tailscale-auth-key",
+        description=(
+            "Name of the agenix secret to create or overwrite. "
+            "Set via TAILSCALE_MANAGER_AGENIX_SECRET_NAME."
+        ),
+    )
+    agenix_secret_scope: str = Field(
+        default="systems",
+        description=(
+            "Key scope passed to agenix-manager new --scope. "
+            "Set via TAILSCALE_MANAGER_AGENIX_SECRET_SCOPE."
+        ),
+    )
+    agenix_manager_bin: str = Field(
+        default="agenix-manager",
+        description=(
+            "Path to the agenix-manager binary. "
+            "Set via TAILSCALE_MANAGER_AGENIX_BIN."
+        ),
+    )
+
     dns_nameservers: list[str] = Field(
         default_factory=list,
         description=(
@@ -291,6 +321,19 @@ class AppConfig(BaseModel):
             "TAILSCALE_MANAGER_PROVIDER_VERSION", "~> 0.29"
         )
 
+        agenix_integration_enabled = os.environ.get(
+            "TAILSCALE_MANAGER_AGENIX_ENABLE", ""
+        ).lower() in ("true", "1", "yes")
+        agenix_secret_name = os.environ.get(
+            "TAILSCALE_MANAGER_AGENIX_SECRET_NAME", "tailscale-auth-key"
+        )
+        agenix_secret_scope = os.environ.get(
+            "TAILSCALE_MANAGER_AGENIX_SECRET_SCOPE", "systems"
+        )
+        agenix_manager_bin = os.environ.get(
+            "TAILSCALE_MANAGER_AGENIX_BIN", "agenix-manager"
+        )
+
         state_backend_raw = os.environ.get("TAILSCALE_MANAGER_STATE_BACKEND", "")
         state_backend: dict[str, Any] | None = None
         if state_backend_raw:
@@ -346,4 +389,8 @@ class AppConfig(BaseModel):
             acl_policy_path=acl_policy_path,
             auth_keys_path=auth_keys_path,
             auth_key_exports=auth_key_exports,
+            agenix_integration_enabled=agenix_integration_enabled,
+            agenix_secret_name=agenix_secret_name,
+            agenix_secret_scope=agenix_secret_scope,
+            agenix_manager_bin=agenix_manager_bin,
         )

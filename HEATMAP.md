@@ -21,7 +21,7 @@ Complexity, fragility, and change-frequency ranking for every file in this proje
 | `nix/default.nix` | 🟢 Low | Simple callPackage — just wraps mkApplication. Stable. |
 | `nix/devshell.nix` | 🟡 Medium | DevShell definitions — changes when env vars, shell hooks, or packages change. |
 | `nix/overlay.nix` | 🟢 Low | Reference overlay — rarely touched once set up. |
-| `nix/module.nix` | 🟡 Medium | NixOS module with structured policy submodule (~900 lines). Option declarations + policyToJSON serialization + merge logic + assertions. Grows with each policy section. |
+| `nix/module.nix` | 🟡 Medium | NixOS module with structured policy submodule (~1170 lines). Option declarations + policyToJSON serialization + merge logic + assertions + agenixIntegration option block. Grows with each policy section. |
 | `nix/home-module.nix` | 🟢 Low | HM module — same, template placeholder. |
 | `nix/checks.nix` | 🟢 Low | Build smoke tests — stable. |
 | `src/tailscale_manager/__init__.py` | 🟢 Low | Public API surface — simple re-export. |
@@ -31,7 +31,8 @@ Complexity, fragility, and change-frequency ranking for every file in this proje
 | `src/tailscale_manager/core/exceptions.py` | 🟢 Low | Exception classes — rarely touched. |
 | `src/tailscale_manager/core/constants.py` | 🟢 Low | Well-known paths — stable. |
 | `src/tailscale_manager/models/` | 🟢 Low | Pure data shapes — one file per feature. |
-| `src/tailscale_manager/services/terraform_service.py` | 🟡 Medium | Core orchestrator — imports feature builders, writes multi-file .tf.json, subprocess calls to terraform, backup/restore. |
+| `src/tailscale_manager/models/agenix_sync.py` | 🟢 Low | Pure dataclass — `AgenixSyncResult` with `to_dict()`. Low fragility. |
+| `src/tailscale_manager/services/terraform/lifecycle.py` | 🟡 Medium | Core apply/destroy lifecycle + `_sync_key_to_agenix` hook. Subprocess calls to terraform and agenix-manager. |
 | `src/tailscale_manager/services/features/` | 🟢 Low | One module per Terraform resource type — pure dict builders, stateless. |
 | `src/tailscale_manager/repositories/` | 🟢 Low | State file I/O — stable interface. |
 | `src/tailscale_manager/utils/` | 🟢 Low | Stateless helpers. |

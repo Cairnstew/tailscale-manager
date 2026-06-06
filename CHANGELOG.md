@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
+## [Unreleased]
+
+### Added
+- `agenixIntegration` NixOS module option: after a successful apply, the
+  generated Tailscale auth key is extracted from tfstate and pushed into
+  `agenix-manager` as an encrypted secret via
+  `agenix-manager new --overwrite`.
+- `AgenixSyncResult` model with `status`, `secret_name`, and `error_message`.
+- `agenix_sync` field in `last-apply.json` reporting sync status independently
+  of the Terraform apply result.
+- Four new environment variables: `TAILSCALE_MANAGER_AGENIX_ENABLE`,
+  `TAILSCALE_MANAGER_AGENIX_SECRET_NAME`,
+  `TAILSCALE_MANAGER_AGENIX_SECRET_SCOPE`, `TAILSCALE_MANAGER_AGENIX_BIN`.
+
 ## [0.5.1] - 2026-06-02
 
 ### Added
