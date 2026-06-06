@@ -31,6 +31,18 @@ def register(parent: typer.Typer) -> None:
         ),
     ) -> None:
         config = load_config()
+        if config.tailnet == "-" and config.oauth_client_id and config.oauth_client_secret:
+            try:
+                from tailscale_manager.services.api.client import TailscaleApiClient
+                from tailscale_manager.services.api.oauth import OAuthClient
+                client = TailscaleApiClient(
+                    OAuthClient(config.oauth_client_id, config.oauth_client_secret),
+                )
+                resolved = client.resolve_tailnet()
+                if resolved != "-":
+                    config.tailnet = resolved
+            except Exception:
+                pass
         repo = StateRepository(config.state_dir)
         keys = repo.get_managed_keys()
         last = repo.read_last_apply()

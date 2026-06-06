@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 import urllib.request
 from datetime import datetime
@@ -22,6 +23,31 @@ class TailscaleApiClient(BaseApiClient):
     def __init__(self, oauth: OAuthClient, tailnet: str = "-") -> None:
         self._oauth = oauth
         self._tailnet = tailnet
+
+    def resolve_tailnet(self) -> str:
+        try:
+            token = self._oauth.get_token()
+            parts = token.split(".")
+            if len(parts) == 3:
+                payload = parts[1]
+                pad = 4 - len(payload) % 4 if len(payload) % 4 else 0
+                decoded = base64.urlsafe_b64decode(payload + "=" * pad)
+                claims = json.loads(decoded)
+                for key in ("tailnet", "iss"):
+                    val = claims.get(key)
+                    if val and isinstance(val, str) and val != "-":
+                        if "/" in val:
+                            val = val.rsplit("/", 1)[-1]
+                        return val
+        except Exception:
+            pass
+        try:
+            data = self._request("GET", "/tailnet/-")
+            if isinstance(data, dict) and data.get("tailnet"):
+                return str(data["tailnet"])
+        except Exception:
+            pass
+        return "-"
 
     def _request(
         self,
