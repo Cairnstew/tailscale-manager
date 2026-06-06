@@ -10,7 +10,6 @@ from textual_ui.screens.main_screen import MainScreen
 class TailscaleManagerApp(TextualAppBase):
     CSS = """
     Screen {
-        layout: horizontal;
         background: #0a0e14;
     }
 
