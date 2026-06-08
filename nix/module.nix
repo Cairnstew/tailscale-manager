@@ -101,16 +101,17 @@ let
     in
       nonAppEntries ++ synthesizedEntry;
 
-  # Strip empty sub-fields from autoApprovers (which is a submodule with
-  # all-optional fields).  Unlike tagOwners/groups, empty lists here have
-  # no semantic meaning and can cause Tailscale API rejection.
+  # Strip null sub-fields from autoApprovers (all sub-fields are nullOr,
+  # so defaults evaluate to null, not {} or []).  If nothing is set,
+  # returns null so the top-level filterAttrs strips it entirely.
   stripAutoApprovers = autoApprovers:
     if builtins.isAttrs autoApprovers then
-      lib.filterAttrs
-        (name: value: value != [] && value != {} && value != null)
-        autoApprovers
+      let
+        cleaned = lib.filterAttrs (name: value: value != null) autoApprovers;
+      in
+        if cleaned == {} then null else cleaned
     else
-      autoApprovers;
+      null;
 
   # ── Serialization ────────────────────────────────────────────────
 
@@ -298,6 +299,23 @@ in
         Useful for catching drift or rotating keys near expiry.
         When false (default), apply only runs on nixos-rebuild switch
         and credential file changes (if watchCredentials is true).
+      '';
+    };
+
+    enableWatcher = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = ''
+        Run tailscale-manager as a long-running daemon that watches
+        policy.json and auth-keys.json for changes and automatically
+        re-runs apply when they are modified.
+
+        When true, the service uses Type=simple with Restart=on-failure
+        and runs 'tailscale-manager watch' instead of the oneshot apply.
+
+        When false (default), apply runs only on nixos-rebuild switch,
+        credential file changes (if watchCredentials is true), or the
+        optional daily timer (if enableTimer is true).
       '';
     };
 
@@ -801,31 +819,31 @@ in
       };
 
       autoApprovers = lib.mkOption {
-        type = lib.types.submodule {
+        type = lib.types.nullOr (lib.types.submodule {
           options = {
             routes = lib.mkOption {
-              type = lib.types.attrsOf (lib.types.listOf lib.types.str);
-              default = {};
+              type = lib.types.nullOr (lib.types.attrsOf (lib.types.listOf lib.types.str));
+              default = null;
               description = "CIDR range → authorized approvers";
               example = {
                 "10.0.0.0/8" = ["group:neteng"];
               };
             };
             exitNode = lib.mkOption {
-              type = lib.types.listOf lib.types.str;
-              default = [];
+              type = lib.types.nullOr (lib.types.listOf lib.types.str);
+              default = null;
               description = "Authorized approvers for exit node advertisements";
               example = ["tag:corp-exit"];
             };
             appConnectors = lib.mkOption {
-              type = lib.types.listOf lib.types.str;
-              default = [];
+              type = lib.types.nullOr (lib.types.listOf lib.types.str);
+              default = null;
               description = "Authorized approvers for app connector advertisements";
               example = ["tag:app-connector-manager"];
             };
           };
-        };
-        default = {};
+        });
+        default = null;
         description = "Users/groups/tags that can bypass approval for routes and exit nodes";
       };
 
@@ -1055,7 +1073,8 @@ in
     environment.systemPackages = [ cfg.package ];
 
     # Print the last apply result on every nixos-rebuild switch.
-    # Informational only — does not trigger re-apply.
+    # Informational only — echo is safe; a non-zero exit here would
+    # brick the rebuild, so we never exit non-zero.
     system.activationScripts.tailscale-manager-status = let
       lastApplyFile = "${cfg.stateDir}/last-apply.json";
       jqBin = "${pkgs.jq}/bin/jq";
@@ -1063,6 +1082,10 @@ in
       if [ -f "${lastApplyFile}" ]; then
         RESULT=$(${jqBin} -r '.result // "unknown"' "${lastApplyFile}" 2>/dev/null)
         echo "tailscale-manager: last apply [$RESULT]"
+        if [ "$RESULT" = "error" ]; then
+          ERR=$(${jqBin} -r '.error_message // "unknown"' "${lastApplyFile}" 2>/dev/null)
+          echo "tailscale-manager:   └─ $ERR"
+        fi
       fi
     '';
 
@@ -1114,34 +1137,46 @@ in
 
       restartIfChanged = true;
 
-      serviceConfig = {
-        Type = "oneshot";
-        StateDirectory = [ "tailscale-manager" ];
-        StateDirectoryMode = "0700";
-        WorkingDirectory = cfg.stateDir;
-        LoadCredential = "tailscale-oauth:${cfg.credentialsFile}";
-        ExecStartPre = lib.optional hasPolicyFile (toString policyWriter)
-          ++ lib.optional hasAuthKeys (toString authKeysWriter)
-          ++ lib.optional hasExportedKeys "${pkgs.coreutils}/bin/mkdir -p ${keysDir}";
-        ExecStart = "${cfg.package}/bin/tailscale-manager apply";
-        ExecStartPost = lib.optional hasExportedKeys (toString chownScript);
-        ReadWritePaths = [ cfg.stateDir ];
-        NoNewPrivileges = true;
-        PrivateTmp = true;
-        PrivateMounts = true;
-        ProtectSystem = "strict";
-        ProtectHome = true;
-        ProtectKernelTunables = true;
-        ProtectKernelModules = true;
-        ProtectControlGroups = true;
-        CapabilityBoundingSet = "";
-        MemoryDenyWriteExecute = true;
-        RestrictNamespaces = true;
-        LockPersonality = true;
-        RestrictSUIDSGID = true;
-        SystemCallFilter = "@system-service";
-        RemoveIPC = true;
-      };
+      serviceConfig =
+        let
+          common = {
+            StateDirectory = [ "tailscale-manager" ];
+            StateDirectoryMode = "0700";
+            WorkingDirectory = cfg.stateDir;
+            LoadCredential = "tailscale-oauth:${cfg.credentialsFile}";
+            ExecStartPre = lib.optional hasPolicyFile (toString policyWriter)
+              ++ lib.optional hasAuthKeys (toString authKeysWriter)
+              ++ lib.optional hasExportedKeys "${pkgs.coreutils}/bin/mkdir -p ${keysDir}";
+            ReadWritePaths = [ cfg.stateDir ];
+            NoNewPrivileges = true;
+            PrivateTmp = true;
+            PrivateMounts = true;
+            ProtectSystem = "strict";
+            ProtectHome = true;
+            ProtectKernelTunables = true;
+            ProtectKernelModules = true;
+            ProtectControlGroups = true;
+            CapabilityBoundingSet = "";
+            MemoryDenyWriteExecute = true;
+            RestrictNamespaces = true;
+            LockPersonality = true;
+            RestrictSUIDSGID = true;
+            SystemCallFilter = "@system-service";
+            RemoveIPC = true;
+          };
+          watcherCfg = {
+            Type = "simple";
+            ExecStart = "${cfg.package}/bin/tailscale-manager watch";
+            Restart = "on-failure";
+            RestartSec = "10s";
+          };
+          oneshotCfg = {
+            Type = "oneshot";
+            ExecStart = "${cfg.package}/bin/tailscale-manager apply";
+            ExecStartPost = lib.optional hasExportedKeys (toString chownScript);
+          };
+        in
+          common // (if cfg.enableWatcher then watcherCfg else oneshotCfg);
     };
 
     # Path unit: re-run apply when credentials file is updated (e.g. agenix rotation)

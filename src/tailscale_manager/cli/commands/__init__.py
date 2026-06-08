@@ -1,5 +1,5 @@
 from tailscale_manager.cli.app import app
-from tailscale_manager.cli.commands import auth_keys, doctor, lifecycle, status, version
+from tailscale_manager.cli.commands import auth_keys, doctor, lifecycle, status, version, watch
 
 
 def register_all() -> None:
@@ -8,3 +8,4 @@ def register_all() -> None:
     doctor.register(app)
     version.register(app)
     auth_keys.register(app)
+    watch.register(app)

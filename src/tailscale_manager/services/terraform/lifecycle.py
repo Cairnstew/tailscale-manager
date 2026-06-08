@@ -192,6 +192,11 @@ class TerraformLifecycleService:
             if agenix_sync is not None:
                 result["agenix_sync"] = agenix_sync.to_dict()
         except TerraformError as exc:
+            _logger.error(
+                "Terraform apply failed (exit %d): %s",
+                exc.exit_code,
+                exc.stderr or exc.stdout,
+            )
             self.state_service.restore_state()
             self.state_service.restore_acl()
             result = {

@@ -17,6 +17,26 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Four new environment variables: `TAILSCALE_MANAGER_AGENIX_ENABLE`,
   `TAILSCALE_MANAGER_AGENIX_SECRET_NAME`,
   `TAILSCALE_MANAGER_AGENIX_SECRET_SCOPE`, `TAILSCALE_MANAGER_AGENIX_BIN`.
+- **`tailscale-manager watch`**: New CLI command that polls `policy.json` and
+  `auth-keys.json` for content changes and automatically re-runs `apply`.
+  Designed to run as a long-running daemon process.
+- **`enableWatcher` NixOS module option**: When `true`, the tailscale-manager
+  systemd service runs as `Type=simple` with `Restart=on-failure` and executes
+  `tailscale-manager watch`. The watch command performs an initial apply on
+  startup, then polls for file changes and re-applies automatically.
+- **Activation script**: When the last apply failed, the error message is now
+  printed during `nixos-rebuild switch` for immediate visibility.
+
+### Fixed
+- **`autoApprovers` nested defaults**: Changed the option type to
+  `types.nullOr (types.submodule { ... })` with `default = null`, and each
+  sub-field (`routes`, `exitNode`, `appConnectors`) to `nullOr` with
+  `default = null`. This prevents empty nested defaults from leaking into
+  the serialized JSON and causing Tailscale API 400 errors. The
+  `stripAutoApprovers` helper was simplified to only filter `null` values.
+- **Terraform error logging**: On apply failure, the full Terraform stderr
+  (containing the API error body) is now logged at `ERROR` level before
+  state rollback, making it easier to diagnose the root cause.
 
 ## [0.5.1] - 2026-06-02
 

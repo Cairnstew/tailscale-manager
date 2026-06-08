@@ -42,22 +42,22 @@ If `flake.nix` uses `pkgs.python3` but `pyproject.toml` says `requires-python = 
 ### Flake lock drift
 After changing flake inputs, run `nix flake lock` to update `flake.lock`. Otherwise you'll silently use the old pinned versions.
 
-## AutoApprovers: empty sub-fields leak into JSON
+## AutoApprovers: nullOr submodule prevents empty defaults from leaking
 
-`autoApprovers` is a submodule with `routes` (default `{}`), `exitNode`
-(default `[]`), and `appConnectors` (default `[]`). If you set only one
-sub-field, the others still appear as empty `{}`/`[]` in the serialized
-JSON. Tailscale's API may reject these empty values.
+`autoApprovers` uses `types.nullOr (types.submodule { ... })` with
+`default = null`, and each sub-field (`routes`, `exitNode`,
+`appConnectors`) also uses `nullOr` with `default = null`.
 
-The fix: `stripAutoApprovers` in `module.nix` removes any empty sub-field
-from `autoApprovers` before serialization. This is applied in addition to
-the top-level `filterAttrs` — note the difference: the top-level filter
-can't reach inside `autoApprovers` because the attrset as a whole is
-non-empty.
+This means:
+- `autoApprovers = null` (default) → stripped by the top-level
+  `filterAttrs` → no `autoApprovers` in the serialized JSON.
+- `autoApprovers = { routes = { ... }; }` → sub-fields not explicitly
+  set evaluate to `null`, which `stripAutoApprovers` removes before
+  serialization. Only set fields appear in the JSON.
 
-This is **not** a general recursive filter — only `autoApprovers` is
-stripped. `tagOwners` and `groups` are left alone because empty lists
-are semantically meaningful there.
+The `stripAutoApprovers` helper exists solely to strip `null` sub-fields;
+it is much simpler than the previous version, which had to handle `{}`
+and `[]` defaults from submodule evaluation.
 
 ## Policy serialization: two-layer cleanup
 
