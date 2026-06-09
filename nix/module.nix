@@ -101,13 +101,16 @@ let
     in
       nonAppEntries ++ synthesizedEntry;
 
-  # Strip null sub-fields from autoApprovers (all sub-fields are nullOr,
-  # so defaults evaluate to null, not {} or []).  If nothing is set,
-  # returns null so the top-level filterAttrs strips it entirely.
+  # Strip empty/null sub-fields from autoApprovers.  The Tailscale API
+  # rejects fields like "appConnectors": [] — they have no semantic
+  # meaning as empty.  Unlike tagOwners/groups where empty-list has
+  # meaning ("admin-only tag"), autoApprovers has none.
   stripAutoApprovers = autoApprovers:
     if builtins.isAttrs autoApprovers then
       let
-        cleaned = lib.filterAttrs (name: value: value != null) autoApprovers;
+        cleaned = lib.filterAttrs
+          (name: value: value != null && value != [] && value != {})
+          autoApprovers;
       in
         if cleaned == {} then null else cleaned
     else

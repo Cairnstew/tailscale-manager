@@ -33,7 +33,9 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
   sub-field (`routes`, `exitNode`, `appConnectors`) to `nullOr` with
   `default = null`. This prevents empty nested defaults from leaking into
   the serialized JSON and causing Tailscale API 400 errors. The
-  `stripAutoApprovers` helper was simplified to only filter `null` values.
+  `stripAutoApprovers` helper now filters `null`, `[]`, and `{}` values to
+  remain robust against downstream consumers that define their own
+  submodule types with the old non-null defaults.
 - **Terraform error logging**: On apply failure, the full Terraform stderr
   (containing the API error body) is now logged at `ERROR` level before
   state rollback, making it easier to diagnose the root cause.
